@@ -198,6 +198,31 @@ Three theories, two of them wrong, which is why each got measured.
 
 So **precision against IDA was never the right target metric** — the entry set is largely correct. Duplication factor is. The fix is to thread the existing `owner` map into the decoder so a block stops when it reaches an instruction another function owns, recording a tail-transfer rather than copying the code. That spans the decoder, the catalog format and `lift32`, so it lands as one validated change rather than piecemeal into a toolbox fifteen projects share.
 
+### The fix, measured
+
+`tools/disasm32_owned.py` threads the `owner` map into the decoder, so an instruction is decoded into exactly one function and later entries that reach it stop there. Entries whose own start is already owned become `alias_of` records — no code, still in the catalog, still dispatchable — and the owner's block is split at that address to give the lifter a label to land on.
+
+| | legacy | ownership | |
+|---|---|---|---|
+| Instructions decoded | 19,171,481 | **3,527,728** | IDA counts 3,449,319 |
+| **Duplication** | 5.56× | **1.00×** | the point of the exercise |
+| Catalog entries | 72,246 | 57,507 | 2,464 of them aliases |
+| Precision vs IDA | 44.88% | **56.28%** | |
+| Recall vs IDA | 99.27% | 99.09% | **moved — see below** |
+| Byte coverage | 13,223,286 | 13,209,330 | **moved — see below** |
+
+**Coverage moved, and 92% of the move is a second fix.** Of the 13,956 bytes no longer covered, 12,849 lie outside every function IDA knows — legacy was decoding non-code, exactly the over-extension the tool's own comments warn about. The remaining **1,107 bytes are real code inside IDA functions**, and that is a genuine regression.
+
+**Recall moved too**, from 237 misses to 296. Those 59 functions are collateral of the same improvement: decoding 12,849 bytes of garbage occasionally decodes a `call` to a real function, so legacy found a handful of functions by accident. Stop decoding garbage and the accidents stop.
+
+Both regressions are small — 0.008% of the code range, 0.18% of recall — against removing 15.6 million redundant instruction decodes. They are recorded rather than rounded away, and neither is fixed yet.
+
+**A variant that was tried and reverted.** Letting an alias walk past its foreign start to pick up code its owner missed produced *byte-for-byte identical* coverage: the scan stops at the next foreign instruction regardless. Complexity for no measured gain, so it went. The reasoning behind it was simply wrong, and only re-running showed that.
+
+**A bug in our own scorer, found the hard way.** `score_recovery.py` rebuilt a 57,507-element set once per reference function — 32,662 times. It survived its first run on a quiet machine and died with `MemoryError` on the second. Fixed and pushed upstream. A measuring instrument that fails only under load is worse than none, because the first number it gives you looks fine.
+
+**A crash that was not our bug.** An earlier run died in capstone with `CS_ERR_MEM` while six other projects' disassemblers were running on the same machine; a plain process listing was timing out at the time. Re-running on an idle machine completed identically. Contention, not the change — but it took the re-run to know that rather than assume it.
+
 **A caveat that belongs on every number above.** Trespasser could build its own binary with a PDB, so it scored against real ground truth. There is no source for Rise of Legends, so IDA is a strong second opinion, not truth. The 8,058 "invented" entries in particular are unresolved: some will be data decoded as code, and some will be functions IDA declined to create. Those need looking at individually before anyone calls them errors.
 
 ### Phase 3 — Symbol recovery *(seed complete)*

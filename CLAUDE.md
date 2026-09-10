@@ -145,14 +145,32 @@ Do NOT quote a duplication factor from summed `size` fields — `size` is
 `end - address` and `end` inflates when descent follows a far jump (mean 10,542
 vs median 184 bytes). That path gives a bogus 57.6x. Use instructions decoded.
 
-**The fix** (not yet implemented): thread the existing `owner` map (built in
-`find_functions`, disasm32.py:458) into `disassemble_function`; stop a block on
-reaching a foreign-owned instruction and record a tail-transfer. An entry whose
-own start is foreign-owned needs an alias representation (`alias_of` +
-offset) rather than an empty body, or `_add_func` drops it. That spans
-decoder + catalog + lift32, so it must land as one validated change:
-re-run disasm, require duplication down and **recall unchanged**, and
-regression-check a second project's binary before pushing upstream.
+**The fix is built and measured**: `tools/disasm32_owned.py` (local working copy
+of pcrecomp's disasm32, NOT yet upstreamed). Threads `owner` into
+`disassemble_function`; foreign-owned code stops a block and gets a CFG edge.
+Entries starting on foreign code become `alias_of` records (kept even with no
+blocks — `_add_func` would otherwise drop them and kill the dispatch), and the
+owner's block is split at the alias address to give the lifter a label.
+`--legacy-duplicate` restores the old behaviour for comparison.
+
+Results: duplication **5.56x -> 1.00x** (19,171,481 -> 3,527,728 instructions
+vs IDA's 3,449,319 heads), entries 72,246 -> 57,507 (2,464 aliases, 1,993
+blocks split), precision 44.88% -> 56.28%.
+
+**Two small regressions, unfixed, do not lose track of these:**
+- coverage -13,956 bytes, of which 12,849 is non-code legacy shouldn't have
+  decoded (a win) but **1,107 bytes are real code inside IDA functions**.
+- recall 99.27% -> 99.09% (237 -> 296 misses). Those 59 were found by accident:
+  decoding garbage sometimes decodes a `call` to a real function.
+
+**Tried and reverted:** letting an alias walk past its foreign start gave
+byte-identical coverage (the scan stops at the next foreign instruction
+anyway). Don't re-try it without a new argument.
+
+**Still required before upstreaming:** `lift32` must emit the transfer for
+`alias_of` entries (decoder half alone leaves them lifting to nothing), plus a
+regression run on a second project's binary (crimsonskies or fury3 — both
+lifted and running, so a change there is loud).
 
 ## Open Questions
 - Discs 2-4 assets are now installed in `_work/game`; `.big` format not yet read.
