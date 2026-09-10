@@ -62,6 +62,35 @@ vs 57,344 scene) — the Microsoft Games product-ID/key-check DLL, which this
 project never calls. The scene release added a crack folder and swapped that one
 DLL; it did not touch the game. No need to re-litigate this.
 
+## THE TARGET (settled 2026-09-09)
+`_work/game/legends.exe` — **v2.5, unprotected**, 15,548,416 bytes,
+md5 `b0ebd5c3154ffd6c0e779d77183000a0`, built 2007-04-10, entry RVA
+`0x00C66ED2` in `.text`, 5 clean sections, 429 imports, 13.25 MB of code.
+Phase 1 (unwrap) is **cancelled** — Microsoft dropped the protection in the
+final patch. Do not go back to the DEViANCE image; it is obsolete.
+
+### How the install was built (repeatable)
+1. Loose trees from disc 1 + disc 2 (`program files\Microsoft Games\Rise Of
+   Legends`) copied to `_work/game`.
+2. All four `DiskNC~1.cab` put in ONE folder (spanned entries need siblings
+   present), extracted to `_work/cabstage` — entries are named by MSI File key.
+3. `scratchpad/dump_msi.ps1` + `place.py` resolve File/Component/Directory
+   tables to real names and paths (root dir id is `INSTALLDIR`). 2,586 placed,
+   all matching the MSI's recorded FileSize. Result: 2.8 GB, 3,545 files,
+   no registry, no CD key, nothing system-wide.
+4. `patch.exe` → copy as `rtp.exe`; syntax `rtp.exe <dir> <patchfile.RTP>`.
+
+### RTPatch gotchas
+- Windows auto-elevates any exe named `patch.exe` (legacy installer detection,
+  no manifest involved). Fix: `$env:__COMPAT_LAYER='RunAsInvoker'`. Renaming
+  alone does NOT help — the version resource triggers it too.
+- RTPatch 8.10 is **transactional**: stages to temp files, commits only on
+  success. So a failed step changes nothing, and every step can be probed
+  against an untouched tree safely.
+- Only `RETAIL-0612.1201.0000-0.0704.1001.0000.RTP` applies to a v1.0 tree
+  (51 files, full replacements, baseline-independent). The other ten abort with
+  `ept0036` (old file content mismatch). That one is all we need.
+
 ## Patch 2.5 (investigated 2026-09-09)
 `RoL_Patch2.5.exe` is Inno Setup 5.5 — local `innounp` is too old; use
 `innoextract` 1.9 (`innoextract -e -m -d <dir> RoL_Patch2.5.exe`). Payload is
@@ -76,7 +105,9 @@ result. The archive.org copy of the patch is byte-identical in size to the local
 one — same wrapper, nothing gained by downloading it.
 
 ## Open Questions
-- Is the v2.5 `legends.exe` still wrapped? See above — needs an install.
-- Discs 2-4 hold the bulk of `.big` assets; not yet catalogued.
+- Discs 2-4 assets are now installed in `_work/game`; `.big` format not yet read.
+- The other ten RTPatch deltas reject our disc build. Unknown whether a
+  different retail pressing matches them. Irrelevant unless an intermediate
+  build is ever needed — the final one applies.
 - Symbol harvest yields only 182 distinct names. Are there richer name tables
   (profiler/telemetry) in `.rdata` that a pointer-run scan would find?

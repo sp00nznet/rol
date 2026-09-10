@@ -2,7 +2,9 @@
 
 A static recompilation of **Rise of Nations: Rise of Legends** (Big Huge Games / Microsoft Game Studios, 2006), targeting modern Windows with native x86 execution.
 
-This is a preservation project. Rise of Legends is the Big Huge Games RTS you **cannot buy anywhere** — no Steam, no GOG, no Microsoft Store, no re-release. Its predecessor *Rise of Nations* got an Extended Edition on Steam in 2014; *Rise of Legends* got nothing. The retail discs are wrapped in SecuROM-class protection, the game shipped a DirectX 9 renderer that argues with modern drivers, and its online component is long dead. If it is going to survive, someone has to take it apart.
+This is a preservation project. Rise of Legends is the Big Huge Games RTS you **cannot buy anywhere** — no Steam, no GOG, no Microsoft Store, no re-release. Its predecessor *Rise of Nations* got an Extended Edition on Steam in 2014; *Rise of Legends* got nothing. The game shipped a DirectX 9 renderer that argues with modern drivers, and its online component is long dead. If it is going to survive, someone has to take it apart.
+
+The retail discs are wrapped in SecuROM-class protection — but Microsoft's own final patch replaces the executable with an unprotected one, so the recompilation starts from a clean, ordinary PE. See [Phase 1](#phase-1--unwrap-complete-there-is-nothing-to-unwrap).
 
 **Bring your own disc. No game files, no game binaries and no extracted assets are committed here — ever.**
 
@@ -11,8 +13,8 @@ This is a preservation project. Rise of Legends is the Big Huge Games RTS you **
 | Phase | Status | Description |
 |-------|--------|-------------|
 | **Phase 0** | **Complete** | Recon — disc layout, PE analysis, DRM identification, engine fingerprinting |
-| **Phase 1** | In Progress | Unwrap — produce a clean, import-rebuilt image from a retail install |
-| **Phase 2** | In Progress | Function discovery — recursive descent over 12.9 MB of x86 |
+| **Phase 1** | **Complete — not needed** | The official 2.5 patch ships an **unprotected** executable. No dumping, no import rebuilding |
+| **Phase 2** | In Progress | Function discovery — recursive descent over 13.25 MB of x86 |
 | **Phase 3** | **Started** | Symbol recovery — `tools/symbols.py` finds 182 distinct method names at 488 call sites |
 | Phase 4 | Pending | Lifting — x86-32 → C (`lift32_cpu.py`, CPU-struct model, hybrid boundary) |
 | Phase 5 | Pending | Build & link |
@@ -24,25 +26,29 @@ This is a preservation project. Rise of Legends is the Big Huge Games RTS you **
 
 ## Binary Analysis
 
-The retail executable is protected. Below: `legends.exe` v1.0 as it ships on disc 1, beside a clean unwrapped image of the same build.
+**The target is `legends.exe` v2.5**, the final official build. It is a perfectly ordinary PE — Microsoft dropped the copy protection in the last patch, so there is nothing to defeat and nothing to reconstruct.
 
-| Property | Retail (on disc) | Unwrapped image |
-|----------|------------------|-----------------|
-| Size | 10,143,000 bytes | 25,731,072 bytes |
+| Property | v1.0 retail (on disc) | **v2.5 — the target** |
+|----------|----------------------|----------------------|
+| Size | 10,143,000 bytes | 15,548,416 bytes |
+| md5 | `40ff9fd21e13c878f41ba1d06688b46b` | `b0ebd5c3154ffd6c0e779d77183000a0` |
 | Format | PE32, i386, Windows GUI | same |
 | Image base | `0x00400000` | `0x00400000` |
-| Entry point RVA | `0x010DB000` (inside `.idata`) | `0x00C581A2` (inside `.text`) |
+| Entry point RVA | `0x010DB000` — inside `.idata` | `0x00C66ED2` — inside `.text` |
 | Linker | 7.10 — Visual C++ .NET 2003 | same |
-| Build timestamp | 2006-04-16 | 2006-03-29 |
-| Imports | 21 functions / 21 DLLs | 427 functions / 21 DLLs |
-| `.text` | VSize 12.9 MB, **raw size 0** | VSize 12.9 MB, raw 12.9 MB |
-| `.rdata` | 1.7 MB, entropy 7.997 | 1.7 MB |
-| `.data` | VSize 2.35 MB, **raw size 0** | 2.35 MB |
+| Build timestamp | 2006-04-16 | 2007-04-10 |
+| Imports | 21 functions / 21 DLLs | **429 functions / 21 DLLs** |
+| Sections | 6, three of them raw-size 0 | **5, all with real data** |
+| `.text` | VSize 12.9 MB, **raw size 0** | 13.25 MB, entropy 6.27 |
+| `.rdata` | 1.7 MB, entropy 7.997 | 1.7 MB, entropy 6.97 |
+| `.data` | VSize 2.35 MB, **raw size 0** | 2.37 MB (164 KB initialised) |
 | `.rsrc` | 400 KB | 400 KB |
-| Trailing section | `.idata` — 8.0 MB, **executable**, entropy 7.92, holds the entry point | inert |
-| PDB path | — | `C:\rts2\Main\game\legends.pdb` |
+| Trailing section | `.idata` — 8.0 MB, **executable**, entropy 7.92, holds the entry point | **none** |
+| Verdict | SecuROM-class wrapper | **No protection or packer indicators** |
 
-Read the retail column as a diagnosis. Code and data sections with a raw size of zero are not in the file at all; one import per DLL is a protector's stub IAT; an 8 MB high-entropy *executable* `.idata` holding the entry point is the wrapper itself. Nothing can be disassembled until the image is whole, which is why Phase 1 is mandatory rather than optional.
+Read the v1.0 column as a diagnosis of what we *expected* to fight. Code and data sections with a raw size of zero are not in the file at all; one import per DLL is a protector's stub IAT; an 8 MB high-entropy *executable* `.idata` holding the entry point is the wrapper itself.
+
+The v2.5 column is what we actually get to work with: five clean sections, entry point in `.text`, a full 429-entry import table, and code entropy of 6.27 — ordinary compiled x86. It disassembles directly.
 
 The build path `C:\rts2\Main\game\` names the engine: **rts2**, the second-generation Big Huge Games RTS engine, successor to the one behind Rise of Nations.
 
@@ -93,15 +99,17 @@ There is **no d3d9.dll import**. Direct3D is loaded dynamically at runtime, whic
 
 ## Roadmap
 
-### Phase 1 — Unwrap
+### Phase 1 — Unwrap *(complete: there is nothing to unwrap)*
 
-The retail image is incomplete on disc; a whole one has to come from a running process, dumped and re-linked with a rebuilt import table.
+The 2.5 patch installer is Inno Setup 5.5 wrapping eleven RTPatch deltas that step an install from build `0604.2001.0000` (retail, 20 April 2006) to `0704.1001.0000` (10 April 2007). No loose executable inside — `legends.exe` arrives as a compressed payload in the last delta, at a size that fits either a wrapped or an unwrapped build. The only way to settle it was to apply the chain.
 
-**The patch chain, investigated.** The 2.5 patch installer is Inno Setup 5.5 wrapping eleven RTPatch deltas that step the install from build `0604.2001.0000` (retail, 20 April 2006) to `0704.1001.0000` (10 April 2007). There is no loose executable in it — `legends.exe` arrives as a compressed payload of roughly 9.8 MB inside the last delta. That size is ambiguous on its own: it fits both a wrapped 10 MB executable copied wholesale *and* an unwrapped 25 MB one squeezed down. Settling it means installing the game, applying the chain with the shipped `patch.exe` / `patchw32.dll`, and re-running section analysis on the result. Worth the half hour, because a patched build that dropped the wrapper would delete this phase and hand us the final balance patch at the same time.
+**Applying it, without installing anything.** The MSI wants a CD key and four disc swaps, so the install was assembled directly instead: the loose trees off discs 1 and 2, plus all 2,586 cabinet files resolved to their real names and directories through the MSI's own `File`, `Component` and `Directory` tables. Every extracted file matches the byte-count the MSI records for it. The result is a complete 2.8 GB v1.0 tree with no registry keys, no product activation and nothing installed system-wide.
 
-**The dump route**, if the patch does not settle it: same shape as the SafeDisc dumper already in pcrecomp — attach, let the wrapper finish unpacking, snapshot the image, walk the IAT and rebuild imports by name.
+The shipped `patch.exe` is RTPatch 8.10, and it turns out to be transactional — it stages into temporary files and commits only on success — so each of the eleven deltas could be tried against an untouched tree in turn. Ten abort on a content mismatch. **The eleventh completes**, applying 51 files, which fits its 157 MB size: the final patch replaces files wholesale rather than diffing them, so it applies to any baseline.
 
-Output: `legends_unwrapped.exe` — produced locally by whoever owns the disc, never distributed.
+What it writes out is an unprotected executable. The wrapper is simply gone — no dumping, no import rebuilding, no reconstruction, and the version we get is the last official build rather than the shipping one.
+
+Two smaller things fell out of it. Windows auto-elevates anything named `patch.exe` by legacy installer heuristic, which `__COMPAT_LAYER=RunAsInvoker` bypasses without touching the system. And 15,548,416 — the size of the new executable — is one of the unidentified 32-bit fields I had found next to the filename in the RTPatch container earlier, which retroactively confirms it was the new-file-size field.
 
 ### Phase 2 — Function discovery
 
@@ -113,10 +121,10 @@ The binary carries its own diagnostics: assert and log strings that spell out re
 
 ```
    174 strings naming a scoped symbol (182 distinct names)
-   172 of them referenced by code (488 sites)
+   172 of them referenced by code (453 sites)
 ```
 
-Those 488 sites become named functions as soon as Phase 2 hands over function boundaries — a partial symbol table out of a stripped binary, for four seconds of scanning. Names are only where the engine happened to assert, so this is a seed, not a map; but a seed that includes the renderer's vertex-stream lock is worth a week of tracing.
+Those 453 sites become named functions as soon as Phase 2 hands over function boundaries — a partial symbol table out of a stripped binary, for four seconds of scanning. Names are only where the engine happened to assert, so this is a seed, not a map; but a seed that includes the renderer's vertex-stream lock is worth a week of tracing.
 
 ### Phase 4-6 — Lift, build, boot
 
@@ -153,6 +161,8 @@ DIFFER  mgspid.dll           81,920 bytes retail vs 57,344 bytes
 ```
 
 One file differs, and it is the Microsoft Games product-ID DLL — the key check, which this project never calls. **`legends.exe` on the circulated image is byte-identical to the one on a physically dumped retail disc**, so every number in this README describes the genuine retail binary. That comparison is also its own control: it would have caught tampering in the executable, and it didn't.
+
+Since the target is now the v2.5 executable, produced by applying Microsoft's own patch to a clean install, the scene image and its unwrapped executable are not needed for anything. The chain from a physical disc to the binary we disassemble is: retail discs → MSI tables → assembled tree → official patch → `b0ebd5c3154ffd6c0e779d77183000a0`.
 
 ## Repository Layout
 
