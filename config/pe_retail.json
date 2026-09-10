@@ -1,0 +1,288 @@
+{
+  "filename": "legends.exe",
+  "filepath": "G:\\recomp\\pc\\rol\\_work\\_iso\\program files\\Microsoft Games\\Rise Of Legends\\legends.exe",
+  "filesize": 10143000,
+  "md5": "",
+  "sha1": "",
+  "image_base": 4194304,
+  "entry_point": 21868544,
+  "entry_point_rva": 17674240,
+  "machine": "i386",
+  "pe_type": "PE32",
+  "is_dll": false,
+  "linker_version": "7.10",
+  "subsystem": "Windows GUI",
+  "timestamp": 1145230696,
+  "timestamp_str": "2006-04-16 23:38:16 UTC",
+  "packed_upx": false,
+  "overlay_size": 6936,
+  "code_start": 4198400,
+  "code_end": 29922995,
+  "data_start": 17391616,
+  "data_end": 21458944,
+  "sections": [
+    {
+      "name": ".text",
+      "virtual_address": 4096,
+      "virtual_size": 13193216,
+      "raw_offset": 0,
+      "raw_size": 0,
+      "characteristics": 3758096416
+    },
+    {
+      "name": ".rdata",
+      "virtual_address": 13197312,
+      "virtual_size": 1708032,
+      "raw_offset": 4096,
+      "raw_size": 1666560,
+      "characteristics": 3221225536
+    },
+    {
+      "name": ".data",
+      "virtual_address": 14905344,
+      "virtual_size": 2352992,
+      "raw_offset": 0,
+      "raw_size": 0,
+      "characteristics": 3221225536
+    },
+    {
+      "name": ".tls",
+      "virtual_address": 17260544,
+      "virtual_size": 4096,
+      "raw_offset": 0,
+      "raw_size": 0,
+      "characteristics": 3221225536
+    },
+    {
+      "name": ".rsrc",
+      "virtual_address": 17264640,
+      "virtual_size": 409600,
+      "raw_offset": 1670656,
+      "raw_size": 408576,
+      "characteristics": 3221225536
+    },
+    {
+      "name": ".idata",
+      "virtual_address": 17674240,
+      "virtual_size": 8054451,
+      "raw_offset": 2079232,
+      "raw_size": 8056832,
+      "characteristics": 3758096416
+    }
+  ],
+  "imports": [
+    {
+      "dll": "advapi32.dll",
+      "name": "CryptDestroyKey",
+      "ordinal": null,
+      "iat_rva": 17694277
+    },
+    {
+      "dll": "avifil32.dll",
+      "name": "AVIStreamWrite",
+      "ordinal": null,
+      "iat_rva": 17694285
+    },
+    {
+      "dll": "binkw32.dll",
+      "name": "_BinkSetSoundSystem@8",
+      "ordinal": null,
+      "iat_rva": 17694293
+    },
+    {
+      "dll": "ddraw.dll",
+      "name": "DirectDrawCreateEx",
+      "ordinal": null,
+      "iat_rva": 17694301
+    },
+    {
+      "dll": "dsound.dll",
+      "name": null,
+      "ordinal": 11,
+      "iat_rva": 17694309
+    },
+    {
+      "dll": "gdi32.dll",
+      "name": "CreateRectRgnIndirect",
+      "ordinal": null,
+      "iat_rva": 17694317
+    },
+    {
+      "dll": "imm32.dll",
+      "name": "ImmGetOpenStatus",
+      "ordinal": null,
+      "iat_rva": 17694325
+    },
+    {
+      "dll": "kernel32.dll",
+      "name": "LoadLibraryA",
+      "ordinal": null,
+      "iat_rva": 17694333
+    },
+    {
+      "dll": "ole32.dll",
+      "name": "CoTaskMemAlloc",
+      "ordinal": null,
+      "iat_rva": 17694341
+    },
+    {
+      "dll": "oleaut32.dll",
+      "name": "VariantClear",
+      "ordinal": null,
+      "iat_rva": 17694349
+    },
+    {
+      "dll": "pdh.dll",
+      "name": "PdhGetFormattedCounterValue",
+      "ordinal": null,
+      "iat_rva": 17694357
+    },
+    {
+      "dll": "psapi.dll",
+      "name": "GetProcessMemoryInfo",
+      "ordinal": null,
+      "iat_rva": 17694365
+    },
+    {
+      "dll": "rpcrt4.dll",
+      "name": "UuidIsNil",
+      "ordinal": null,
+      "iat_rva": 17694373
+    },
+    {
+      "dll": "shell32.dll",
+      "name": "ShellExecuteW",
+      "ordinal": null,
+      "iat_rva": 17694381
+    },
+    {
+      "dll": "shfolder.dll",
+      "name": "SHGetFolderPathW",
+      "ordinal": null,
+      "iat_rva": 17694389
+    },
+    {
+      "dll": "user32.dll",
+      "name": "IsWindowUnicode",
+      "ordinal": null,
+      "iat_rva": 17694397
+    },
+    {
+      "dll": "version.dll",
+      "name": "VerQueryValueA",
+      "ordinal": null,
+      "iat_rva": 17694405
+    },
+    {
+      "dll": "winhttp.dll",
+      "name": "WinHttpAddRequestHeaders",
+      "ordinal": null,
+      "iat_rva": 17694413
+    },
+    {
+      "dll": "winmm.dll",
+      "name": "mixerGetDevCapsA",
+      "ordinal": null,
+      "iat_rva": 17694421
+    },
+    {
+      "dll": "wmvcore.dll",
+      "name": "WMCreateReaderPriv",
+      "ordinal": null,
+      "iat_rva": 17694429
+    },
+    {
+      "dll": "ws2_32.dll",
+      "name": "recv",
+      "ordinal": null,
+      "iat_rva": 17694437
+    }
+  ],
+  "exports": [],
+  "iat_map": {
+    "0x014DFE45": {
+      "dll": "advapi32.dll",
+      "name": "CryptDestroyKey"
+    },
+    "0x014DFE4D": {
+      "dll": "avifil32.dll",
+      "name": "AVIStreamWrite"
+    },
+    "0x014DFE55": {
+      "dll": "binkw32.dll",
+      "name": "_BinkSetSoundSystem@8"
+    },
+    "0x014DFE5D": {
+      "dll": "ddraw.dll",
+      "name": "DirectDrawCreateEx"
+    },
+    "0x014DFE65": {
+      "dll": "dsound.dll",
+      "name": "ordinal_11"
+    },
+    "0x014DFE6D": {
+      "dll": "gdi32.dll",
+      "name": "CreateRectRgnIndirect"
+    },
+    "0x014DFE75": {
+      "dll": "imm32.dll",
+      "name": "ImmGetOpenStatus"
+    },
+    "0x014DFE7D": {
+      "dll": "kernel32.dll",
+      "name": "LoadLibraryA"
+    },
+    "0x014DFE85": {
+      "dll": "ole32.dll",
+      "name": "CoTaskMemAlloc"
+    },
+    "0x014DFE8D": {
+      "dll": "oleaut32.dll",
+      "name": "VariantClear"
+    },
+    "0x014DFE95": {
+      "dll": "pdh.dll",
+      "name": "PdhGetFormattedCounterValue"
+    },
+    "0x014DFE9D": {
+      "dll": "psapi.dll",
+      "name": "GetProcessMemoryInfo"
+    },
+    "0x014DFEA5": {
+      "dll": "rpcrt4.dll",
+      "name": "UuidIsNil"
+    },
+    "0x014DFEAD": {
+      "dll": "shell32.dll",
+      "name": "ShellExecuteW"
+    },
+    "0x014DFEB5": {
+      "dll": "shfolder.dll",
+      "name": "SHGetFolderPathW"
+    },
+    "0x014DFEBD": {
+      "dll": "user32.dll",
+      "name": "IsWindowUnicode"
+    },
+    "0x014DFEC5": {
+      "dll": "version.dll",
+      "name": "VerQueryValueA"
+    },
+    "0x014DFECD": {
+      "dll": "winhttp.dll",
+      "name": "WinHttpAddRequestHeaders"
+    },
+    "0x014DFED5": {
+      "dll": "winmm.dll",
+      "name": "mixerGetDevCapsA"
+    },
+    "0x014DFEDD": {
+      "dll": "wmvcore.dll",
+      "name": "WMCreateReaderPriv"
+    },
+    "0x014DFEE5": {
+      "dll": "ws2_32.dll",
+      "name": "recv"
+    }
+  }
+}

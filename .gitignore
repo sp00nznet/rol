@@ -1,0 +1,33 @@
+# Game data (copyrighted - never commit)
+*.zip
+*.iso
+*.bin
+*.cue
+*.exe
+*.dll
+*.big
+_work/
+_iso/
+game/
+
+# Generated code (reproducible from binary + tools)
+src/recomp/gen/
+
+# Build
+build/
+cmake-build-*/
+*.log
+
+# Tools (sibling checkout, not a submodule)
+tools/pcrecomp/
+
+# IDE / editor
+.vs/
+.vscode/
+.idea/
+*.sln
+*.vcxproj*
+*~
+
+# Claude
+.claude/
