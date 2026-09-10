@@ -134,16 +134,25 @@ Win32 through the existing compat layer. Direct3D is late-bound, so the seam is 
 
 A recompilation is only as trustworthy as the bytes it starts from, and the widely circulating "ISO ALL-IN-ONE" EN set carries a scene crack alongside the retail files. That crack's unwrapped executable is useful as a *structural* reference — it proves what a correct unwrap should look like — but it is not something to build a pipeline on, and it is not evidence of what the genuine disc contains.
 
-What is out there, as of the survey:
+So the target binary was checked against a disc nobody had touched.
 
-| Source | Verified? | Note |
-|--------|-----------|------|
-| Taiwan release, 4 discs | **Yes** — redump.org discs 81912-81915 | Verified retail dump, but the Traditional Chinese build |
-| EN 4-CD set, from a physical collection | No, but no crack advertised | Photographed disc, plausible clean rip — under evaluation |
-| EN "ISO ALL-IN-ONE" | No | Contains a scene crack directory; this is the common one |
-| Official 2.5 patch | n/a | The circulating copy is an unofficial German Inno wrapper around the real RTPatch deltas; contents verified above |
+| Source | Standing | Note |
+|--------|----------|------|
+| **EN 4-CD set, from a physical collection** | **Clean** | Alcohol 120% dump of real discs (2022), 1200 dpi scans of media and manual, no crack directory. Read errors confined to sectors 1034-1043 — the protection's deliberately unreadable block, not game data |
+| Taiwan release, 4 discs | Verified | redump.org discs 81912-81915, but the Traditional Chinese build |
+| EN "ISO ALL-IN-ONE" | Tampered | Carries a scene crack directory; this is the widely circulated one |
+| Official 2.5 patch | n/a | The circulating copy is an unofficial German Inno wrapper around the real RTPatch deltas |
 
-The goal is a retail `legends.exe` whose provenance we can state, hashed against a verified dump. Nothing here depends on any particular download — the pipeline consumes an image its user produces from their own disc.
+Comparing every shipped binary across the clean dump and the circulated one:
+
+```
+MATCH   legends.exe          40ff9fd21e13c878f41ba1d06688b46b
+MATCH   binkw32.dll  NxPhysics.dll  NxCooking.dll  d3d8xstub.dll
+MATCH   fluidModel.dll  patcher.dll  patchw32.dll  script_compiler.exe  (+6 more)
+DIFFER  mgspid.dll           81,920 bytes retail vs 57,344 bytes
+```
+
+One file differs, and it is the Microsoft Games product-ID DLL — the key check, which this project never calls. **`legends.exe` on the circulated image is byte-identical to the one on a physically dumped retail disc**, so every number in this README describes the genuine retail binary. That comparison is also its own control: it would have caught tampering in the executable, and it didn't.
 
 ## Repository Layout
 

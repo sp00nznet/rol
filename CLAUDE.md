@@ -19,6 +19,11 @@ MSVC 7.1 / linker 7.10, PE32 x86, image base 0x400000.
   - `_work/_iso/DEViANCE/legends.exe` — unwrapped reference image found on the
     disc image. Structural reference only; the pipeline must target an image the
     disc owner produces themselves (Phase 1)
+  - `_work/cd1_retail.iso` + `_work/_retail/` — disc 1 from a clean physical
+    Alcohol 120% dump (archive.org `rise-of-nations-rise-of-legends-2006-
+    microsoft-big-huge-games-4-cd-set`, 7z md5 3c872c2a169a7c4733fd03cc47a69ee1).
+    MDF is **2448 bytes/sector** (RAW+SUB-96): take bytes 16..2064 of each block.
+    The scene disc 1 bin is MODE1/2352 — different stride, don't mix them up.
 - Source discs: `G:/recomp/pc/rol/*.zip` (4 CDs + unofficial 2.5 patch installer)
 - Toolbox: `G:/recomp/pc/tools` = the `pcrecomp` repo. Do not duplicate its tools.
 
@@ -48,6 +53,14 @@ python /g/recomp/pc/tools/tools/pe/pe_analyze.py legends.exe --json config/pe.js
 python /g/recomp/pc/tools/tools/pe/analyze_sections.py legends.exe   # DRM/packing
 python /g/recomp/pc/tools/tools/disasm/disasm32.py legends.exe -o functions.json
 ```
+
+## Provenance (settled 2026-09-09)
+Retail `legends.exe` md5 **40ff9fd21e13c878f41ba1d06688b46b**, 10,143,000 bytes.
+Byte-identical between the circulated scene ISO and a clean physical disc dump.
+Every shipped binary matches across the two except `mgspid.dll` (81,920 retail
+vs 57,344 scene) — the Microsoft Games product-ID/key-check DLL, which this
+project never calls. The scene release added a crack folder and swapped that one
+DLL; it did not touch the game. No need to re-litigate this.
 
 ## Patch 2.5 (investigated 2026-09-09)
 `RoL_Patch2.5.exe` is Inno Setup 5.5 — local `innounp` is too old; use
