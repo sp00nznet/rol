@@ -1,0 +1,13 @@
+{
+ "precision": 0.44881377515710213,
+ "recall": 0.9927438613679506,
+ "f1": 0.6181606741144623,
+ "reference": 32662,
+ "candidate": 72246,
+ "true_positives": 32425,
+ "false_positives": 39821,
+ "false_negatives": 237,
+ "fp_split": 31763,
+ "fp_invented": 8058,
+ "has_ranges": true
+}

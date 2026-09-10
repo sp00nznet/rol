@@ -8,13 +8,19 @@ The retail discs are wrapped in SecuROM-class protection — but Microsoft's own
 
 **Bring your own disc. No game files, no game binaries and no extracted assets are committed here — ever.**
 
+## Two goals
+
+Getting the game running is the obvious one. The other is an audit: **this is the most modern and by far the largest binary the [pcrecomp](https://github.com/sp00nznet/pcrecomp) toolchain has been pointed at.** 13.25 MB of 2006-vintage MSVC 7.1 C++, 19.2 million instructions, 25,513 functions reachable only through vtables, and no RTTI to lean on. Everything the tools have been proven on is smaller, older, or both.
+
+So every stage here gets measured against a reference rather than asserted, findings flow back upstream into pcrecomp where all fifteen projects get them, and failures of our own tooling are reported as prominently as successes. A number with no oracle behind it is an opinion. The method is [Trespasser's](https://github.com/sp00nznet/trespasser); the target is one generation newer.
+
 ## Project Status
 
 | Phase | Status | Description |
 |-------|--------|-------------|
 | **Phase 0** | **Complete** | Recon — disc layout, PE analysis, DRM identification, engine fingerprinting |
 | **Phase 1** | **Complete — not needed** | The official 2.5 patch ships an **unprotected** executable. No dumping, no import rebuilding |
-| **Phase 2** | **Complete** | Function discovery — 99.8% byte coverage, 19.2M instructions across 72,246 entries |
+| **Phase 2** | **Complete + scored** | Function discovery — 99.8% byte coverage; **99.3% recall / 44.9% precision** against IDA |
 | **Phase 3** | **Complete (seed)** | Symbol recovery — 143 named functions bound from the engine's own diagnostics |
 | Phase 4 | Pending | Lifting — x86-32 → C (`lift32_cpu.py`, CPU-struct model, hybrid boundary) |
 | Phase 5 | Pending | Build & link |
@@ -136,7 +142,41 @@ Recursive descent from the entry point, plus data-section scans for function poi
 
 Two caveats on the 1.9 : 1 ratio: the named sample is startup code, which is unusually instrumented and may split differently from the rest, and it is 273 entries out of 72,246. It is a signal to go measure properly, not a correction factor to multiply by.
 
-The honest next step, borrowed from the [Trespasser](https://github.com/sp00nznet/trespasser) audit, which scored the same toolchain at precision 77.1% / recall 78.5% against ground truth: **score recovery here before committing to a lift.** This binary is larger than anything the tool has been measured on, so its error rate should be measured rather than assumed.
+So recovery was scored before committing to a lift, the way the [Trespasser](https://github.com/sp00nznet/trespasser) audit does it. See the scorecard below.
+
+### The scorecard — disasm32 against IDA Pro 9.1
+
+IDA analysed the same binary headlessly in **70 seconds** (against our 50 minutes) and found 32,662 functions. Scoring our 72,246 entries against it with `score_recovery.py`:
+
+| | |
+|---|---|
+| True positives | 32,425 |
+| False positives | 39,821 — **31,763 split**, 8,058 invented |
+| False negatives | **237** |
+| **Precision** | **44.88%** |
+| **Recall** | **99.27%** |
+
+**Recall is the headline.** Of everything IDA finds, we miss 237 functions — 0.7%. The scan reaches essentially all the code, which is what 99.8% byte coverage promised and this independently confirms.
+
+Precision is low, but the breakdown says the failure is benign. A false positive here is one of two very different defects, and `score_recovery.py` separates them because IDA supplies function *ranges* where a linker map supplies only starts:
+
+- **split** (31,763) — the address is *inside* a function IDA knows. One function entered twice. It duplicates code in a lift; it does not invent any.
+- **invented** (8,058) — the address is outside every known function. This is where data may have been decoded as code, and the only category that lifts to garbage.
+
+Four of every five false positives are splits, so the tool over-segments rather than hallucinating. Where the splits come from:
+
+| Evidence | Value |
+|---|---|
+| Sampled splits that appear as a 4-byte pointer in the image | **53%** |
+| IDA functions absorbing splits | 6,722 |
+| Worst single function | **238** splits |
+| Share held by the worst 5% of those functions | 37% |
+
+Half arrive through the data-pointer scan — jump tables, whose entries point *into* function bodies by design — and the concentration is the giveaway: a function taking 238 separate "starts" is one big switch statement being read as hundreds of functions.
+
+Trespasser found the same concentration on a 1998 binary ("5% of functions absorb nearly all of them"). The same defect on two targets nine years and one C++ dialect apart makes this a property of the tool, not of either game — which is exactly the sort of thing this project exists to find out.
+
+**A caveat that belongs on every number above.** Trespasser could build its own binary with a PDB, so it scored against real ground truth. There is no source for Rise of Legends, so IDA is a strong second opinion, not truth. The 8,058 "invented" entries in particular are unresolved: some will be data decoded as code, and some will be functions IDA declined to create. Those need looking at individually before anyone calls them errors.
 
 ### Phase 3 — Symbol recovery *(seed complete)*
 

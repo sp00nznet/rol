@@ -1,0 +1,11 @@
+{
+ "reference": "IDA Professional 9.1 (idalib)",
+ "binary": "legends.exe",
+ "count": 32662,
+ "stats": {
+  "library": 717,
+  "thunks": 143,
+  "user_named": 57,
+  "noret": 27
+ }
+}
