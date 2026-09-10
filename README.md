@@ -176,6 +176,28 @@ Half arrive through the data-pointer scan — jump tables, whose entries point *
 
 Trespasser found the same concentration on a 1998 binary ("5% of functions absorb nearly all of them"). The same defect on two targets nine years and one C++ dialect apart makes this a property of the tool, not of either game — which is exactly the sort of thing this project exists to find out.
 
+### What the splits actually cost, and what actually causes them
+
+Three theories, two of them wrong, which is why each got measured.
+
+**Wrong: the splits are spurious and should be deleted.** They are load-bearing. `disasm32`'s own comments say a jump into another function's body is deliberately promoted to an entry point, because the lifter tail-dispatches to it and would otherwise leave the dispatch unresolved at runtime. Exception-handling funclets and switch arms genuinely need to be dispatchable. Delete them and the lift breaks.
+
+**Wrong: unrecognised jump tables cause them.** Plausible — recursive descent cannot follow `jmp dword ptr [reg*4 + table]`, so arms stay uncovered and the data scan promotes each one. But IDA recovered **770 switches with 6,341 distinct arm targets**, at most 20% of the 31,763 splits. (A capstone probe suggested only 16 tables; that probe was unsound — a linear sweep desynchronises on data-in-code and covered 7.3% of the section. Discarded.)
+
+**Right: the entries are fine; the duplication is the defect.**
+
+| | |
+|---|---|
+| Instructions IDA counts in `.text` | 3,449,319 |
+| Instructions our catalog decoded | 19,171,481 |
+| **Duplication factor** | **5.6×** |
+
+`disassemble_function` decodes from its start address with no knowledge of what other functions already own, following jumps within a ±1 MB window. An entry landing mid-function therefore re-decodes that function's whole remainder. At 13.25 MB, lifting that catalog means emitting roughly 5.6× the C we need.
+
+(An earlier version of this number said 57.6×, computed from summed `size` fields. That was an artifact: `size` is `end - address`, and the tool's own comment warns that following a far jump inflates `end`. Mean entry size came out at 10,542 bytes against a median of 184. Instructions decoded is the sound measure.)
+
+So **precision against IDA was never the right target metric** — the entry set is largely correct. Duplication factor is. The fix is to thread the existing `owner` map into the decoder so a block stops when it reaches an instruction another function owns, recording a tail-transfer rather than copying the code. That spans the decoder, the catalog format and `lift32`, so it lands as one validated change rather than piecemeal into a toolbox fifteen projects share.
+
 **A caveat that belongs on every number above.** Trespasser could build its own binary with a PDB, so it scored against real ground truth. There is no source for Rise of Legends, so IDA is a strong second opinion, not truth. The 8,058 "invented" entries in particular are unresolved: some will be data decoded as code, and some will be functions IDA declined to create. Those need looking at individually before anyone calls them errors.
 
 ### Phase 3 — Symbol recovery *(seed complete)*

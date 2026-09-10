@@ -126,6 +126,34 @@ mid-flight fix does nothing for a running job — restart it. Also: never pipe a
 long job through `tail` (buffers everything, blinds you); redirect to a log
 file and use `-u`.
 
+## Splits: diagnosed 2026-09-10 (READ BEFORE "FIXING" THEM)
+**Do not delete split entries.** They are load-bearing: `disasm32` deliberately
+promotes a jump into another function's body to an entry point so the lifter
+can tail-dispatch to it. EH funclets and switch arms must stay dispatchable.
+
+Jump tables are NOT the main cause — IDA: 770 switches, 6,341 arm targets, at
+most 20% of the 31,763 splits. (A capstone linear-sweep probe claiming "16
+tables" was unsound: it desyncs on data-in-code, covered 7.3% of `.text`.)
+
+**The real defect is duplication, not entry count.** IDA counts 3,449,319
+instruction heads in `.text`; our catalog decoded 19,171,481 → **5.6x**.
+`disassemble_function` (disasm32.py:241) decodes from its start with no
+knowledge of `owner`, following jumps within ±0x100000, so an entry landing
+mid-function re-decodes the whole remainder.
+
+Do NOT quote a duplication factor from summed `size` fields — `size` is
+`end - address` and `end` inflates when descent follows a far jump (mean 10,542
+vs median 184 bytes). That path gives a bogus 57.6x. Use instructions decoded.
+
+**The fix** (not yet implemented): thread the existing `owner` map (built in
+`find_functions`, disasm32.py:458) into `disassemble_function`; stop a block on
+reaching a foreign-owned instruction and record a tail-transfer. An entry whose
+own start is foreign-owned needs an alias representation (`alias_of` +
+offset) rather than an empty body, or `_add_func` drops it. That spans
+decoder + catalog + lift32, so it must land as one validated change:
+re-run disasm, require duplication down and **recall unchanged**, and
+regression-check a second project's binary before pushing upstream.
+
 ## Open Questions
 - Discs 2-4 assets are now installed in `_work/game`; `.big` format not yet read.
 - The other ten RTPatch deltas reject our disc build. Unknown whether a
