@@ -13,7 +13,7 @@ This is a preservation project. Rise of Legends is the Big Huge Games RTS you **
 | **Phase 0** | **Complete** | Recon — disc layout, PE analysis, DRM identification, engine fingerprinting |
 | **Phase 1** | In Progress | Unwrap — produce a clean, import-rebuilt image from a retail install |
 | **Phase 2** | In Progress | Function discovery — recursive descent over 12.9 MB of x86 |
-| Phase 3 | Pending | Symbol recovery — bind the binary's embedded `BHG::Class::method` strings to function addresses |
+| **Phase 3** | **Started** | Symbol recovery — `tools/symbols.py` finds 182 distinct method names at 488 call sites |
 | Phase 4 | Pending | Lifting — x86-32 → C (`lift32_cpu.py`, CPU-struct model, hybrid boundary) |
 | Phase 5 | Pending | Build & link |
 | Phase 6 | Pending | Runtime bringup — CRT init, static constructors, `WinMain` |
@@ -95,10 +95,11 @@ There is **no d3d9.dll import**. Direct3D is loaded dynamically at runtime, whic
 
 ### Phase 1 — Unwrap
 
-The retail image is incomplete on disc; a whole one has to come from a running process, dumped and re-linked with a rebuilt import table. Two routes, cheapest first:
+The retail image is incomplete on disc; a whole one has to come from a running process, dumped and re-linked with a rebuilt import table.
 
-1. **Check patch 2.5 first.** The official patch chain replaces `legends.exe`. If the 2.5 executable is thinner than the wrapper, most of this phase evaporates. Cheap to test, so it gets tested first.
-2. **Dump from the owner's own install.** Same shape as the SafeDisc dumper already in pcrecomp: attach, let the wrapper finish unpacking, snapshot the image, walk the IAT and rebuild imports by name.
+**The patch chain, investigated.** The 2.5 patch installer is Inno Setup 5.5 wrapping eleven RTPatch deltas that step the install from build `0604.2001.0000` (retail, 20 April 2006) to `0704.1001.0000` (10 April 2007). There is no loose executable in it — `legends.exe` arrives as a compressed payload of roughly 9.8 MB inside the last delta. That size is ambiguous on its own: it fits both a wrapped 10 MB executable copied wholesale *and* an unwrapped 25 MB one squeezed down. Settling it means installing the game, applying the chain with the shipped `patch.exe` / `patchw32.dll`, and re-running section analysis on the result. Worth the half hour, because a patched build that dropped the wrapper would delete this phase and hand us the final balance patch at the same time.
+
+**The dump route**, if the patch does not settle it: same shape as the SafeDisc dumper already in pcrecomp — attach, let the wrapper finish unpacking, snapshot the image, walk the IAT and rebuild imports by name.
 
 Output: `legends_unwrapped.exe` — produced locally by whoever owns the disc, never distributed.
 
@@ -108,7 +109,14 @@ Recursive descent from the entry point, plus data-section scans for `push imm32`
 
 ### Phase 3 — Symbol recovery *(the lever unique to this title)*
 
-The binary carries its own diagnostics: assert and log strings that spell out real function signatures — `BHG::SoundManager::init`, `BHG::D3DVertStream::lock`, and hundreds more, some as full prototypes with parameter types. Cross-referencing each string to the function that pushes it yields named, typed functions out of a stripped binary. No other project in this family has had this much to work with, and it front-loads comprehension: knowing which function is the renderer's vertex-stream lock is worth a week of tracing.
+The binary carries its own diagnostics: assert and log strings that spell out real method names — `BHG::SoundManager::init`, `BHG::D3DVertStream::lock` — some as full prototypes with parameter types. `tools/symbols.py` pulls the scoped names out of those strings and scans every section for 4-byte references to them:
+
+```
+   174 strings naming a scoped symbol (182 distinct names)
+   172 of them referenced by code (488 sites)
+```
+
+Those 488 sites become named functions as soon as Phase 2 hands over function boundaries — a partial symbol table out of a stripped binary, for four seconds of scanning. Names are only where the engine happened to assert, so this is a seed, not a map; but a seed that includes the renderer's vertex-stream lock is worth a week of tracing.
 
 ### Phase 4-6 — Lift, build, boot
 
@@ -122,12 +130,29 @@ Win32 through the existing compat layer. Direct3D is late-bound, so the seam is 
 
 `.big` mounting and XML rules first (nothing renders without them), then the simulation and render loop, then the things the original never had: proper widescreen, high DPI, modern input, and a multiplayer stack that does not depend on a service shut down years ago.
 
+## Provenance
+
+A recompilation is only as trustworthy as the bytes it starts from, and the widely circulating "ISO ALL-IN-ONE" EN set carries a scene crack alongside the retail files. That crack's unwrapped executable is useful as a *structural* reference — it proves what a correct unwrap should look like — but it is not something to build a pipeline on, and it is not evidence of what the genuine disc contains.
+
+What is out there, as of the survey:
+
+| Source | Verified? | Note |
+|--------|-----------|------|
+| Taiwan release, 4 discs | **Yes** — redump.org discs 81912-81915 | Verified retail dump, but the Traditional Chinese build |
+| EN 4-CD set, from a physical collection | No, but no crack advertised | Photographed disc, plausible clean rip — under evaluation |
+| EN "ISO ALL-IN-ONE" | No | Contains a scene crack directory; this is the common one |
+| Official 2.5 patch | n/a | The circulating copy is an unofficial German Inno wrapper around the real RTPatch deltas; contents verified above |
+
+The goal is a retail `legends.exe` whose provenance we can state, hashed against a verified dump. Nothing here depends on any particular download — the pipeline consumes an image its user produces from their own disc.
+
 ## Repository Layout
 
 ```
 config/         Phase 0 analysis output (PE structure, import tables, disc catalog)
 docs/           Design notes and per-phase write-ups
-tools/          Project-specific tooling
+tools/
+  symbols.py    Harvest the binary's own method-name strings and their call sites
+                (`--selftest` runs its checks; no game files needed)
 ```
 
 Generic analysis and lifting tools live in [pcrecomp](https://github.com/sp00nznet/pcrecomp) and are not duplicated here.

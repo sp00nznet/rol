@@ -49,7 +49,21 @@ python /g/recomp/pc/tools/tools/pe/analyze_sections.py legends.exe   # DRM/packi
 python /g/recomp/pc/tools/tools/disasm/disasm32.py legends.exe -o functions.json
 ```
 
+## Patch 2.5 (investigated 2026-09-09)
+`RoL_Patch2.5.exe` is Inno Setup 5.5 — local `innounp` is too old; use
+`innoextract` 1.9 (`innoextract -e -m -d <dir> RoL_Patch2.5.exe`). Payload is
+eleven RTPatch deltas chaining build `0604.2001.0000` (retail) →
+`0704.1001.0000` (v2.5, Apr 2007), plus `patch_control.xml` listing the order.
+No loose exe: `legends.exe` sits at offset ~147.6M in the last RTP with ~9.8 MB
+of compressed payload before the next entry — ambiguous between a wholesale copy
+of the 10 MB wrapped exe and a squeezed 25 MB unwrapped one. **Do not reverse
+the RTP container** (that was a rabbit hole); install the game, run the chain
+with the shipped `patch.exe`/`patchw32.dll`, then `analyze_sections.py` the
+result. The archive.org copy of the patch is byte-identical in size to the local
+one — same wrapper, nothing gained by downloading it.
+
 ## Open Questions
-- Does official patch 2.5 ship a thinner `legends.exe`? Test before writing a
-  dumper — it could delete Phase 1 outright.
+- Is the v2.5 `legends.exe` still wrapped? See above — needs an install.
 - Discs 2-4 hold the bulk of `.big` assets; not yet catalogued.
+- Symbol harvest yields only 182 distinct names. Are there richer name tables
+  (profiler/telemetry) in `.rdata` that a pointer-run scan would find?
