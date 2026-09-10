@@ -104,6 +104,28 @@ with the shipped `patch.exe`/`patchw32.dll`, then `analyze_sections.py` the
 result. The archive.org copy of the patch is byte-identical in size to the local
 one — same wrapper, nothing gained by downloading it.
 
+## Phase 2 result (2026-09-10)
+`_work/functions_v25.json` (22.9 MB): 72,246 entries, 19,171,481 instructions,
+**99.8% byte coverage**, 9 discovery rounds (converged: last round 13 targets).
+Runtime ~50 min.
+
+**The 72,246 is inflated — quote coverage, not the count.** Measured from the
+named subset: 273 named entries carry only 143 distinct names, and 113 of 130
+duplicate-name address gaps are under 4 KB (one function split, not two).
+7,584 entries are under 16 bytes. Don't multiply by the 1.9:1 ratio — the named
+sample is startup code and only 273 entries. Measure properly instead: score
+recovery against ground truth the way trespasser did (P 77.1% / R 78.5%) BEFORE
+committing to a lift. See `G:/recomp/pc/trespasser` — same toolchain, and its
+audit method is the model to copy.
+
+## CHECK PCRECOMP'S LOG BEFORE LONG JOBS
+The toolbox is shared and moves under us. Lost 2.5 h to this: a run started at
+21:18 used pre-fix `disasm32.py`; commit `e9d96cb` ("make disassemble_at lazy,
+~20x faster") hit disk at 21:47. Python reads source at startup, so a
+mid-flight fix does nothing for a running job — restart it. Also: never pipe a
+long job through `tail` (buffers everything, blinds you); redirect to a log
+file and use `-u`.
+
 ## Open Questions
 - Discs 2-4 assets are now installed in `_work/game`; `.big` format not yet read.
 - The other ten RTPatch deltas reject our disc build. Unknown whether a

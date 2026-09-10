@@ -14,8 +14,8 @@ The retail discs are wrapped in SecuROM-class protection — but Microsoft's own
 |-------|--------|-------------|
 | **Phase 0** | **Complete** | Recon — disc layout, PE analysis, DRM identification, engine fingerprinting |
 | **Phase 1** | **Complete — not needed** | The official 2.5 patch ships an **unprotected** executable. No dumping, no import rebuilding |
-| **Phase 2** | In Progress | Function discovery — recursive descent over 13.25 MB of x86 |
-| **Phase 3** | **Started** | Symbol recovery — `tools/symbols.py` finds 182 distinct method names at 488 call sites |
+| **Phase 2** | **Complete** | Function discovery — 99.8% byte coverage, 19.2M instructions across 72,246 entries |
+| **Phase 3** | **Complete (seed)** | Symbol recovery — 143 named functions bound from the engine's own diagnostics |
 | Phase 4 | Pending | Lifting — x86-32 → C (`lift32_cpu.py`, CPU-struct model, hybrid boundary) |
 | Phase 5 | Pending | Build & link |
 | Phase 6 | Pending | Runtime bringup — CRT init, static constructors, `WinMain` |
@@ -54,7 +54,7 @@ The build path `C:\rts2\Main\game\` names the engine: **rts2**, the second-gener
 
 ### What the code actually is
 
-12.9 MB of x86 in `.text` — roughly six times the code volume of a 2000-era title like Crimson Skies. Expect tens of thousands of functions. This is the largest target attempted in this family so far, and the roadmap is written accordingly: the lifting is automated, the bring-up is not.
+13.25 MB of x86 in `.text` — roughly six times the code volume of a 2000-era title like Crimson Skies, and 19.2 million instructions once decoded. This is the largest target attempted in this family so far, and the roadmap is written accordingly: the lifting is automated, the bring-up is not.
 
 C++ throughout, MSVC 7.1, `__thiscall` heavy, namespaced under `BHG::`. RTTI is present only for the CRT and iostreams — the game's own classes were built without it, so vtable recovery has to come from data-section pointer scanning rather than type descriptors.
 
@@ -111,20 +111,46 @@ What it writes out is an unprotected executable. The wrapper is simply gone — 
 
 Two smaller things fell out of it. Windows auto-elevates anything named `patch.exe` by legacy installer heuristic, which `__COMPAT_LAYER=RunAsInvoker` bypasses without touching the system. And 15,548,416 — the size of the new executable — is one of the unidentified 32-bit fields I had found next to the filename in the RTPatch container earlier, which retroactively confirms it was the new-file-size field.
 
-### Phase 2 — Function discovery
+### Phase 2 — Function discovery *(complete)*
 
-Recursive descent from the entry point, plus data-section scans for `push imm32` function pointers and vtable arrays. With no game RTTI, vtable recovery leans on `.rdata` pointer-run detection.
+Recursive descent from the entry point, plus data-section scans for function pointers and vtable arrays. Nine discovery rounds, converging cleanly — the last round found 13 new targets:
 
-### Phase 3 — Symbol recovery *(the lever unique to this title)*
+```
+[*] Data scan: 25513 functions reachable only via data pointers...
+[*] Successfully disassembled 72246 functions (9 discovery rounds)
+[*] Functions: 72246  (thunks=123, leaves=14212)
+[*] Instructions: 19,171,481
+[*] Byte coverage: 13,223,286 / 13,252,097 (99.8% of code range)
+```
 
-The binary carries its own diagnostics: assert and log strings that spell out real method names — `BHG::SoundManager::init`, `BHG::D3DVertStream::lock` — some as full prototypes with parameter types. `tools/symbols.py` pulls the scoped names out of those strings and scans every section for 4-byte references to them:
+**Read the coverage, not the function count.** 99.8% means essentially the whole code range was reached and decoded — that is the number the lift depends on. The 72,246 is an upper bound with real inflation in it, and the symbol map measures how much:
+
+| Signal | Value | What it means |
+|--------|-------|---------------|
+| Named entries | 273 | Functions referencing exactly one scoped name |
+| Distinct names among them | **143** | So named entries outnumber named functions ~1.9 : 1 |
+| Duplicate-name address gaps under 4 KB | **113 of 130** | One function split into pieces, not two functions |
+| Entries under 16 bytes | 7,584 | Fragments and tails, not real functions |
+
+`Game::init` appearing at two addresses 363 bytes apart is not two functions; it is one function entered twice by the scan. That the naming pass doubles as a split-entry detector is a happy accident — the same evidence that names a function also proves when two entries are one.
+
+Two caveats on the 1.9 : 1 ratio: the named sample is startup code, which is unusually instrumented and may split differently from the rest, and it is 273 entries out of 72,246. It is a signal to go measure properly, not a correction factor to multiply by.
+
+The honest next step, borrowed from the [Trespasser](https://github.com/sp00nznet/trespasser) audit, which scored the same toolchain at precision 77.1% / recall 78.5% against ground truth: **score recovery here before committing to a lift.** This binary is larger than anything the tool has been measured on, so its error rate should be measured rather than assumed.
+
+### Phase 3 — Symbol recovery *(seed complete)*
+
+`tools/symbols.py --functions` binds the harvested names to the functions that reference them:
 
 ```
    174 strings naming a scoped symbol (182 distinct names)
    172 of them referenced by code (453 sites)
+   297 functions reference a scoped name (273 of them exactly one)
 ```
 
-Those 453 sites become named functions as soon as Phase 2 hands over function boundaries — a partial symbol table out of a stripped binary, for four seconds of scanning. Names are only where the engine happened to assert, so this is a seed, not a map; but a seed that includes the renderer's vertex-stream lock is worth a week of tracing.
+That yields **143 named functions** through the game's startup path — `Game::init`, `Game::setup_build_cities`, `GameOut::init_terrain_render`, `LaunchWin::set_status_string`. The engine announces each startup phase by name, so the strings map onto the boot sequence in order, which is exactly the region a bring-up has to walk first.
+
+Names only exist where the engine happened to instrument itself, so this is a seed covering a fraction of a percent of the binary. Its value is positional rather than statistical: it labels the path from `WinMain` to a running simulation.
 
 ### Phase 4-6 — Lift, build, boot
 

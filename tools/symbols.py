@@ -15,6 +15,7 @@ Feed it an unwrapped image -- a protected one has no readable .text.
 """
 
 import argparse
+import bisect
 import json
 import re
 import struct
@@ -63,6 +64,33 @@ def find_refs(secs, targets):
     return refs
 
 
+def load_functions(path):
+    """[(start, end, name)] sorted by start, from a disasm32 catalog."""
+    with open(path) as f:
+        cat = json.load(f)
+    return sorted((fn['address'], fn['end'], fn.get('name')) for fn in cat['functions'])
+
+
+def enclosing(funcs, addr):
+    """The function containing addr, or None. funcs must be sorted."""
+    i = bisect.bisect_right(funcs, (addr, float('inf'), None)) - 1
+    if i < 0:
+        return None
+    start, end, name = funcs[i]
+    return funcs[i] if start <= addr < end else None
+
+
+def bind(strings, refs, funcs):
+    """{function_start: {names}} -- every scoped name a function references."""
+    named = {}
+    for va, (_, names) in strings.items():
+        for site in refs.get(va, []):
+            fn = enclosing(funcs, site)
+            if fn:
+                named.setdefault(fn[0], set()).update(names)
+    return named
+
+
 def demo():
     """One runnable check: planted string, planted reference, both found."""
     base = 0x400000
@@ -82,6 +110,14 @@ def demo():
 
     # a reference that is only a coincidental partial match must not count
     assert find_refs([(0x500000, struct.pack('<I', base + 1))], set(strings)) == {}
+
+    # the reference site binds to the function that encloses it, not a neighbour
+    funcs = [(0x500000, 0x500010, None), (0x500010, 0x500020, None)]
+    assert enclosing(funcs, 0x500001) == funcs[0]
+    assert enclosing(funcs, 0x500010) == funcs[1]
+    assert enclosing(funcs, 0x4fffff) is None
+    assert enclosing(funcs, 0x500020) is None, 'past the last function is unmapped'
+    assert bind(strings, refs, funcs) == {0x500000: {'BHG::SoundManager::init'}}
     print('selftest ok')
 
 
@@ -90,6 +126,7 @@ def main():
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument('exe', nargs='?', help='unwrapped legends.exe')
     ap.add_argument('-o', '--output', help='write JSON here')
+    ap.add_argument('--functions', help='disasm32 catalog, to bind names to functions')
     ap.add_argument('--selftest', action='store_true')
     args = ap.parse_args()
 
@@ -109,9 +146,18 @@ def main():
     print(f'{len(strings):6} strings naming a scoped symbol ({len(unique)} distinct names)')
     print(f'{len(referenced):6} of them referenced by code ({sum(len(r) for r in refs.values())} sites)')
 
+    named = {}
+    if args.functions:
+        funcs = load_functions(args.functions)
+        named = bind(strings, refs, funcs)
+        certain = {a: next(iter(n)) for a, n in named.items() if len(n) == 1}
+        print(f'{len(named):6} functions reference a scoped name '
+              f'({len(certain)} of them exactly one -- take those as the symbol)')
+
     if args.output:
-        out = [{'va': va, 'text': strings[va][0], 'names': strings[va][1],
-                'refs': refs.get(va, [])} for va in sorted(strings)]
+        out = {'strings': [{'va': va, 'text': strings[va][0], 'names': strings[va][1],
+                            'refs': refs.get(va, [])} for va in sorted(strings)],
+               'functions': {f'0x{a:08X}': sorted(n) for a, n in sorted(named.items())}}
         with open(args.output, 'w') as f:
             json.dump(out, f, indent=1)
         print(f'wrote {args.output}')

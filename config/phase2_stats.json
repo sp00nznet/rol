@@ -1,0 +1,16 @@
+{
+ "exe": "legends.exe",
+ "image_base": 4194304,
+ "code_start": 4198400,
+ "code_end": 17450497,
+ "iat_count": 429,
+ "stats": {
+  "functions": 72246,
+  "thunks": 123,
+  "leaves": 14212,
+  "instructions": 19171481,
+  "covered_bytes": 13223286,
+  "code_bytes": 13252097,
+  "coverage_pct": 99.78
+ }
+}
