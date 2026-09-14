@@ -172,6 +172,25 @@ anyway). Don't re-try it without a new argument.
 regression run on a second project's binary (crimsonskies or fury3 — both
 lifted and running, so a change there is loud).
 
+### FIELD-NAME MISMATCH TO RESOLVE FIRST (noticed 2026-09-13)
+Another session (trespasser) extended `score_recovery.py` upstream while this
+was in flight, and it reached the same conclusion independently: on Trespasser
+**6,427 of 7,364 false positives were aliases — 87% of the reported error**.
+Their version holds aliases out of precision entirely and scores function ends
+too. But it keys on **`"entry_kind": "alias"`**, while `disasm32_owned.py`
+emits **`"alias_of": <addr>`**. Converge on theirs (`entry_kind`, keeping
+`alias_of` for the target address) before upstreaming, or the scorer silently
+counts every one of our 2,464 aliases as a false positive.
+
+Their scorer also warns: trim trailing `0xCC`/`0x90` from reference ends before
+comparing, or correct functions read as truncated (82% of their "short" ends
+were padding). Do NOT trim `0x00` — it is a legal encoding.
+
+pcrecomp has also moved on: `321b633 "Follow the jump: a jmp inside a function
+is not the end of it"` looks directly relevant to ownership/splits. **Re-read
+pcrecomp's log and rebase this work on current HEAD before doing anything
+else** — `disasm32_owned.py` was copied from an older revision.
+
 ## Open Questions
 - Discs 2-4 assets are now installed in `_work/game`; `.big` format not yet read.
 - The other ten RTPatch deltas reject our disc build. Unknown whether a
