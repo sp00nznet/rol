@@ -38,10 +38,11 @@ target_include_directories(rol PRIVATE
 # 0xDEAD0000 into a size argument (forcecommander).
 target_compile_definitions(rol PRIVATE RECOMP_RETADDR=0u _CRT_SECURE_NO_WARNINGS
                                              RECOMP_FLAT_MEMORY RECOMP_LOCAL_REGS)
-# Linked high and not relocatable, so the guest's 0x00400000..0x01106000 is
-# free; /LARGEADDRESSAWARE because the game alone was a 2 GB-class process.
+# Linked high and not relocatable, so the guest's 0x00400000..0x014ED000 is
+# free. /STACK is 1 MB so the initial stack fits below 0x00400000; the guest
+# runs on its own 16 MB thread (host.c, relaunch_reserved).
 target_link_options(rol PRIVATE /BASE:0x60000000 /FIXED:NO /DYNAMICBASE:NO
-                                      /NXCOMPAT /LARGEADDRESSAWARE /STACK:0x1000000
+                                      /NXCOMPAT /LARGEADDRESSAWARE /STACK:0x100000
                                       /MANIFESTUAC:NO)
 set(GEN_OPT "/O2" CACHE STRING "optimisation for the generated C")
 set_source_files_properties(${GEN_SOURCES} PROPERTIES COMPILE_OPTIONS "/w;${GEN_OPT}")

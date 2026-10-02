@@ -1,0 +1,22 @@
+{
+ "precision": 0.6992020304131805,
+ "recall": 0.9952850407201028,
+ "f1": 0.8213757816941444,
+ "reference": 32662,
+ "candidate": 46493,
+ "true_positives": 32508,
+ "false_positives": 13985,
+ "false_negatives": 154,
+ "fp_split": 7335,
+ "fp_invented": 6650,
+ "aliases": 15331,
+ "alias_inside_known": 14703,
+ "alias_on_reference_start": 28,
+ "has_ranges": true,
+ "ends_scored": 32508,
+ "end_exact": 28580,
+ "end_short": 3638,
+ "end_long": 290,
+ "end_short_median_bytes": 233,
+ "end_short_max_bytes": 45950
+}

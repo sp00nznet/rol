@@ -421,6 +421,54 @@ static DWORD WINAPI watchdog(LPVOID unused) {
     return 0;
 }
 
+/* Keeping 0x00400000 free. RoL's image runs to 0x014ED000, and by the time
+ * main() runs, the loader's heaps, NLS tables and mapped files have filled the
+ * low address space first-fit -- straight through that range (docs/host.md).
+ * So the host relaunches itself suspended, reserves the range in the child
+ * before its loader initialises anything, and resumes it; image_loader then
+ * commits into the reservation. Only ntdll, this exe and the initial
+ * stack exist at that point, which is why /STACK is 1 MB (it fits below
+ * 0x00400000) and the guest runs on its own 16 MB thread instead. */
+#define ROL_CHILD_ENV "ROL_HOST_CHILD"
+
+static uint32_t image_size(const char* path) {
+    uint32_t size = 0, lfanew = 0;
+    FILE* f = fopen(path, "rb");
+    if (!f) return 0;
+    if (!fseek(f, 0x3C, SEEK_SET) && fread(&lfanew, 4, 1, f) == 1 &&
+        !fseek(f, lfanew + 24 + 56, SEEK_SET))             /* OptionalHeader.SizeOfImage */
+        fread(&size, 4, 1, f);
+    fclose(f);
+    return size;
+}
+
+static int relaunch_reserved(uint32_t size) {
+    STARTUPINFOA si = { sizeof si };
+    PROCESS_INFORMATION pi;
+    DWORD code = 1;
+    SetEnvironmentVariableA(ROL_CHILD_ENV, "1");
+    si.dwFlags = STARTF_USESTDHANDLES;
+    si.hStdInput = GetStdHandle(STD_INPUT_HANDLE);
+    si.hStdOutput = GetStdHandle(STD_OUTPUT_HANDLE);
+    si.hStdError = GetStdHandle(STD_ERROR_HANDLE);
+    if (!CreateProcessA(NULL, GetCommandLineA(), NULL, NULL, TRUE, CREATE_SUSPENDED, NULL, NULL, &si, &pi)) {
+        fprintf(stderr, "relaunch failed: %lu\n", GetLastError());
+        return 1;
+    }
+    if (!VirtualAllocEx(pi.hProcess, (void*)(uintptr_t)ROL_IMAGE_BASE, size, MEM_RESERVE, PAGE_NOACCESS))
+        fprintf(stderr, "[host] could not reserve the guest range in the child (%lu)\n", GetLastError());
+    ResumeThread(pi.hThread);
+    WaitForSingleObject(pi.hProcess, INFINITE);
+    GetExitCodeProcess(pi.hProcess, &code);
+    return (int)code;
+}
+
+static DWORD WINAPI guest_main(LPVOID unused) {
+    (void)unused;
+    native32_call_guest(rol_entry_va, 0, NULL);
+    return 0;
+}
+
 int main(int argc, char** argv) {
     const char* exe = "_work\\game\\legends.exe";
     const char* game = "_work\\game";
@@ -482,8 +530,29 @@ int main(int argc, char** argv) {
     AddVectoredExceptionHandler(0, crash);
     printf("Rise of Legends recomp host\n  lifted functions in dispatch: %u\n", recomp_dispatch_count);
 
+    if (!GetEnvironmentVariableA(ROL_CHILD_ENV, NULL, 0)) {
+        uint32_t size = image_size(exe_full);
+        if (!size) { fprintf(stderr, "cannot read %s\n", exe_full); return 1; }
+        fflush(stdout);
+        return relaunch_reserved(size);
+    }
+    /* The child keeps the reservation: image_loader commits into it, and
+     * releasing it first lets the loader's own 15 MB file buffer land there. */
     uint32_t span = native32_map(exe_full, ROL_IMAGE_BASE);
-    if (!span) { fprintf(stderr, "cannot map %s at 0x%08X\n", exe_full, ROL_IMAGE_BASE); return 1; }
+    if (!span) {
+        /* Name whatever already sits in the guest's range: RoL's image runs to
+         * 0x014ED000, so the host's own stack or heap can land inside it. */
+        MEMORY_BASIC_INFORMATION mbi;
+        fprintf(stderr, "cannot map %s at 0x%08X; occupied:\n", exe_full, ROL_IMAGE_BASE);
+        for (uintptr_t a = ROL_IMAGE_BASE; a < 0x02000000u && VirtualQuery((void*)a, &mbi, sizeof mbi);
+             a = (uintptr_t)mbi.BaseAddress + mbi.RegionSize)
+            if (mbi.State != MEM_FREE)
+                fprintf(stderr, "  0x%08X +0x%08X  alloc base 0x%08X  %s type 0x%X\n",
+                        (uint32_t)(uintptr_t)mbi.BaseAddress, (uint32_t)mbi.RegionSize,
+                        (uint32_t)(uintptr_t)mbi.AllocationBase,
+                        mbi.State == MEM_COMMIT ? "commit" : "reserve", (unsigned)mbi.Type);
+        return 1;
+    }
     printf("  mapped %s: 0x%08X-0x%08X\n", exe, ROL_IMAGE_BASE, ROL_IMAGE_BASE + span);
     if (g_headless) {                  /* headless also takes the scripted-input shims */
         int nh = (int)(sizeof g_headless_shims / sizeof g_headless_shims[0]);
@@ -507,7 +576,11 @@ int main(int argc, char** argv) {
     if (g_watch32 || g_watch32_ptr) CloseHandle(CreateThread(NULL, 0, watch32, NULL, 0, NULL));
     printf("  entering 0x%08X\n\n", rol_entry_va);
     fflush(stdout);
-    native32_call_guest(rol_entry_va, 0, NULL);
+    {
+        HANDLE t = CreateThread(NULL, 16u << 20, guest_main, NULL, STACK_SIZE_PARAM_IS_A_RESERVATION, NULL);
+        WaitForSingleObject(t, INFINITE);
+        CloseHandle(t);
+    }
     printf("\nentry returned eax=%08X\n", g_eax);
     return (int)g_eax;
 }
