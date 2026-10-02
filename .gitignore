@@ -31,3 +31,6 @@ tools/pcrecomp/
 
 # Claude
 .claude/
+
+# Symbol maps reconstructed from the binary (repo rules s3)
+config/symbols*.json

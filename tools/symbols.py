@@ -8,7 +8,7 @@ Each one is referenced as a 4-byte immediate by the code it belongs to, so
 finding the strings and then scanning for references to them turns a stripped
 binary into a partial symbol map.
 
-    python tools/symbols.py legends_unwrapped.exe -o config/symbols.json
+    python tools/symbols.py legends_unwrapped.exe -o _work/symbols.json   # derived from the binary: never committed
     python tools/symbols.py --selftest
 
 Feed it an unwrapped image -- a protected one has no readable .text.
