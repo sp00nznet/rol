@@ -20,11 +20,11 @@ So every stage here gets measured against a reference rather than asserted, find
 |-------|--------|-------------|
 | **Phase 0** | **Complete** | Recon — disc layout, PE analysis, DRM identification, engine fingerprinting |
 | **Phase 1** | **Complete — not needed** | The official 2.5 patch ships an **unprotected** executable. No dumping, no import rebuilding |
-| **Phase 2** | **Complete + scored** | Function discovery — 99.8% byte coverage; **99.3% recall / 44.9% precision** against IDA |
+| **Phase 2** | **Complete + scored (relifted 2026-10-02)** | Function discovery — 61,824 functions, 95.0% byte coverage; **99.53% recall / 69.9% precision / 87.9% exact ends** against IDA (was 99.3% / 44.9%) |
 | **Phase 3** | **Complete (seed)** | Symbol recovery — 143 named functions bound from the engine's own diagnostics |
-| Phase 4 | Pending | Lifting — x86-32 → C (`lift32_cpu.py`, CPU-struct model, hybrid boundary) |
-| Phase 5 | Pending | Build & link |
-| Phase 6 | Pending | Runtime bringup — CRT init, static constructors, `WinMain` |
+| **Phase 4** | **Complete** | Lifting — `run_lift.py --all`: **64,608 functions, 0 lift errors**, 22.5M lines of C |
+| **Phase 5** | **In progress** | Build & link — 3,000-function closure builds and links; full build paused (memory: see below) |
+| **Phase 6** | **Started** | Runtime bringup — image maps, 429/429 imports bind, lifted CRT runs to the closure edge |
 | Phase 7 | Pending | Platform layer — Win32, D3D9, DirectSound; middleware DLLs stay real |
 | Phase 8 | Pending | Asset layer — `.big` archives, XML rules, localisation |
 | Phase 9 | Pending | Game loop — simulation, terrain, render |
@@ -239,9 +239,41 @@ That yields **143 named functions** through the game's startup path — `Game::i
 
 Names only exist where the engine happened to instrument itself, so this is a seed covering a fraction of a percent of the binary. Its value is positional rather than statistical: it labels the path from `WinMain` to a running simulation.
 
-### Phase 4-6 — Lift, build, boot
+### Phase 4-6 — Lift, build, boot *(in progress)*
 
-Standard pcrecomp pipeline: `lift32_cpu.py` to a reentrant CPU-struct C model, hybrid boundary so the real MSVC 7.1 CRT keeps running while the game body is recompiled, then CRT init → static constructors → `WinMain`.
+The relift follows [The Movies](https://github.com/sp00nznet/themovies), the closest proven title: a disasm32 catalog, `run_lift.py` over pcrecomp's `generate.py` + `lift32`, and a **32-bit MSVC host on pcrecomp's `runtime/native32`**. In that host the guest image sits 1:1 at `0x00400000`, and every import, `GetProcAddress` result and COM vtable is the real DLL behind one bridge. That matters here: PhysX, Bink, `fluidModel.dll` and `d3d8xstub.dll` are called as they are, with no hand-written shims.
+
+**Catalog (current pcrecomp `main`)**, scored against IDA 9.1 with aliases held out of precision:
+
+| | Sep (legacy) | Sep (ownership fix) | **Oct relift** |
+|---|---|---|---|
+| precision | 44.9% | 56.3% | **69.9%** |
+| recall | 99.27% | 99.09% | **99.53%** |
+| missed functions | 237 | 296 | **154** |
+| exact function ends | n/a | n/a | **87.9%** |
+
+Upstream's extent clamping and interior checks beat this repo's own ownership-aware decoder on every axis, so `tools/disasm32_owned.py` is parked.
+
+**Lift:** 64,608 functions (2,784 branch targets outside the catalog added as entries), 0 errors, 67 without a terminator, 22.5M lines of C in 162 chunks.
+
+**The first host wall: 0x00400000 was taken.** RoL's image runs to `0x014ED000`, 4 MB further than The Movies'. In a host linked high, the process's own early allocations fill the low address space first-fit: the 16 MB initial stack took `0x00400000-0x01400000`, and the loader's heaps and mapped NLS files took the rest. So the host relaunches itself suspended, reserves the range in the child before its loader runs, and lets `image_loader` commit into the reservation. Releasing the range first does not work, because the loader `malloc`s the 15 MB file before mapping and the heap takes the hole. The initial stack is now 1 MB, which fits below the image, and the guest runs on a 16 MB thread.
+
+**First run** (3,000-function closure from the entry point, headless):
+
+```
+[bind] 0x00400000: 417 native, 0 guest, 12 shimmed, 0 unresolved
+  mapped _work\game\legends.exe: 0x00400000-0x014ED000
+  entering 0x01066ED2
+
+[not-lifted] sub_010675AB  (called from 0x01065264)
+last indirect calls (newest first):
+  0x761041B0  from 0x010677A2  KERNEL32.dll!HeapFree
+  0x776BF650  from 0x010676E9  KERNEL32.dll!HeapAlloc
+```
+
+The lifted CRT runs against the real heap and stops exactly at the edge of what was lifted.
+
+**Where it paused:** the full 22.5M-line build. At 12 parallel jobs, `cl` died on 14 chunks of 30-50 MB each with no diagnostic (memory). Each one compiles alone in about 70 s. At `-j 6` the build made the workstation unusable and was stopped. Next time: smaller chunks (`--split 150`), low priority, and a capped `-j`.
 
 ### Phase 7 — Platform layer
 
@@ -277,11 +309,29 @@ One file differs, and it is the Microsoft Games product-ID DLL — the key check
 
 Since the target is now the v2.5 executable, produced by applying Microsoft's own patch to a clean install, the scene image and its unwrapped executable are not needed for anything. The chain from a physical disc to the binary we disassemble is: retail discs → MSI tables → assembled tree → official patch → `b0ebd5c3154ffd6c0e779d77183000a0`.
 
+## Building (step by step)
+
+Prerequisites: Python 3.10+ with `pefile` and `capstone`, Visual Studio 2022 (or Build Tools) with the C++ x86 tools, CMake 3.20+ and Ninja, and pcrecomp checked out **beside** this repo as `../pcrecomp-rol` (this project pins its own worktree at `origin/main`). You also need your own v2.5 install at `_work/game/` (see Provenance).
+
+```
+python ../pcrecomp-rol/tools/cpp/rtti.py _work/game/legends.exe -o _work/relift/rtti.json --seeds _work/relift/rtti_seeds.json
+python -u ../pcrecomp-rol/tools/disasm/disasm32.py _work/game/legends.exe -o _work/relift/functions.json --seed-functions _work/relift/rtti_seeds.json   # ~65 min
+python run_lift.py            # 3,000-function closure from the entry point, ~4 min
+python run_lift.py --all      # everything, ~25 min, 22.5M lines
+build.cmd -j 4                # 32-bit host -> build/rol.exe
+build\rol.exe --headless --run --watchdog 60
+```
+
+**Generated source is never distributed.** `src/recomp/gen/` is derived from your own binary and is gitignored; this repo ships only the tools and the host.
+
 ## Repository Layout
 
 ```
-config/         Phase 0 analysis output (PE structure, import tables, disc catalog)
+config/         Analysis output (PE structure, import tables, disc catalog, recovery scores)
 docs/           Design notes and per-phase write-ups
+run_lift.py     Catalog -> src/recomp/gen/ (closure-limited or --all)
+CMakeLists.txt  32-bit MSVC host on pcrecomp runtime/native32; build.cmd drives it
+src/runtime/    host.c (mapping, binding, headless shims, fault report), input.c
 tools/
   symbols.py    Harvest the binary's own method-name strings and their call sites
                 (`--selftest` runs its checks; no game files needed)

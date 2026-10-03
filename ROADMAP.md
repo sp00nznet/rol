@@ -1,8 +1,9 @@
 # Roadmap
 
 ## Next
-- Relift against current pcrecomp HEAD (disasm32 extent clamping, lift32 fixes).
-- Build, and boot to `WinMain` / first window.
+- Finish the full build without starving the workstation: `--split 150`,
+  low priority, capped `-j`.
+- Headless run of the full lift; follow faults to `WinMain` and the first window.
 
 ## Deferred
 - Upstream `disasm32_owned.py` ownership decode (needs `entry_kind` field
