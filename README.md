@@ -1,264 +1,149 @@
 # Rise of Legends — Static Recompilation
 
-A static recompilation of **Rise of Nations: Rise of Legends** (Big Huge Games / Microsoft Game Studios, 2006), targeting modern Windows with native x86 execution.
+Static recompilation of **Rise of Nations: Rise of Legends** (Big Huge Games /
+Microsoft Game Studios, 2006) from its final official Win32 executable to
+native C. Bring your own discs: nothing from the game is in this repository.
 
-This is a preservation project. Rise of Legends is the Big Huge Games RTS you **cannot buy anywhere** — no Steam, no GOG, no Microsoft Store, no re-release. Its predecessor *Rise of Nations* got an Extended Edition on Steam in 2014; *Rise of Legends* got nothing. The game shipped a DirectX 9 renderer that argues with modern drivers, and its online component is long dead. If it is going to survive, someone has to take it apart.
+Rise of Legends has never been re-released (no Steam, GOG or Store edition),
+its DirectX 9 renderer argues with modern drivers, and its online service is
+gone. It is also the largest and newest binary the
+[pcrecomp](https://github.com/sp00nznet/pcrecomp) toolchain has been pointed
+at (13.25 MB of MSVC 7.1 C++, no RTTI for the game's classes), so the second
+goal is an audit: every stage is measured against a reference, and what the
+tools get wrong goes back upstream. This repo follows pcrecomp's shared house
+style (layout, CLI, harness, headless mode), next to
+[The Movies](https://github.com/sp00nznet/themovies), its closest sibling.
 
-The retail discs are wrapped in SecuROM-class protection — but Microsoft's own final patch replaces the executable with an unprotected one, so the recompilation starts from a clean, ordinary PE. See [Phase 1](#phase-1--unwrap-complete-there-is-nothing-to-unwrap).
+## Status: **v0.1.0-dev, alpha (bring-up). The whole game lifts with 0 errors; the lifted CRT runs, and nothing renders yet.**
 
-**Bring your own disc. No game files, no game binaries and no extracted assets are committed here — ever.**
-
-## Two goals
-
-Getting the game running is the obvious one. The other is an audit: **this is the most modern and by far the largest binary the [pcrecomp](https://github.com/sp00nznet/pcrecomp) toolchain has been pointed at.** 13.25 MB of 2006-vintage MSVC 7.1 C++, 19.2 million instructions, 25,513 functions reachable only through vtables, and no RTTI to lean on. Everything the tools have been proven on is smaller, older, or both.
-
-So every stage here gets measured against a reference rather than asserted, findings flow back upstream into pcrecomp where all fifteen projects get them, and failures of our own tooling are reported as prominently as successes. A number with no oracle behind it is an opinion. The method is [Trespasser's](https://github.com/sp00nznet/trespasser); the target is one generation newer.
-
-## Project Status
-
-| Phase | Status | Description |
-|-------|--------|-------------|
-| **Phase 0** | **Complete** | Recon — disc layout, PE analysis, DRM identification, engine fingerprinting |
-| **Phase 1** | **Complete — not needed** | The official 2.5 patch ships an **unprotected** executable. No dumping, no import rebuilding |
-| **Phase 2** | **Complete + scored (relifted 2026-10-02)** | Function discovery — 61,824 functions, 95.0% byte coverage; **99.53% recall / 69.9% precision / 87.9% exact ends** against IDA (was 99.3% / 44.9%) |
-| **Phase 3** | **Complete (seed)** | Symbol recovery — 143 named functions bound from the engine's own diagnostics |
-| **Phase 4** | **Complete** | Lifting — `run_lift.py --all`: **64,608 functions, 0 lift errors**, 22.5M lines of C |
-| **Phase 5** | **In progress** | Build & link — 3,000-function closure builds and links; full build paused (memory: see below) |
-| **Phase 6** | **Started** | Runtime bringup — image maps, 429/429 imports bind, lifted CRT runs to the closure edge |
-| Phase 7 | Pending | Platform layer — Win32, D3D9, DirectSound; middleware DLLs stay real |
-| Phase 8 | Pending | Asset layer — `.big` archives, XML rules, localisation |
-| Phase 9 | Pending | Game loop — simulation, terrain, render |
-| Phase 10 | Pending | Modernisation — widescreen, high DPI, modern input, LAN/online revival |
-
-## Binary Analysis
-
-**The target is `legends.exe` v2.5**, the final official build. It is a perfectly ordinary PE — Microsoft dropped the copy protection in the last patch, so there is nothing to defeat and nothing to reconstruct.
-
-| Property | v1.0 retail (on disc) | **v2.5 — the target** |
-|----------|----------------------|----------------------|
-| Size | 10,143,000 bytes | 15,548,416 bytes |
-| md5 | `40ff9fd21e13c878f41ba1d06688b46b` | `b0ebd5c3154ffd6c0e779d77183000a0` |
-| Format | PE32, i386, Windows GUI | same |
-| Image base | `0x00400000` | `0x00400000` |
-| Entry point RVA | `0x010DB000` — inside `.idata` | `0x00C66ED2` — inside `.text` |
-| Linker | 7.10 — Visual C++ .NET 2003 | same |
-| Build timestamp | 2006-04-16 | 2007-04-10 |
-| Imports | 21 functions / 21 DLLs | **429 functions / 21 DLLs** |
-| Sections | 6, three of them raw-size 0 | **5, all with real data** |
-| `.text` | VSize 12.9 MB, **raw size 0** | 13.25 MB, entropy 6.27 |
-| `.rdata` | 1.7 MB, entropy 7.997 | 1.7 MB, entropy 6.97 |
-| `.data` | VSize 2.35 MB, **raw size 0** | 2.37 MB (164 KB initialised) |
-| `.rsrc` | 400 KB | 400 KB |
-| Trailing section | `.idata` — 8.0 MB, **executable**, entropy 7.92, holds the entry point | **none** |
-| Verdict | SecuROM-class wrapper | **No protection or packer indicators** |
-
-Read the v1.0 column as a diagnosis of what we *expected* to fight. Code and data sections with a raw size of zero are not in the file at all; one import per DLL is a protector's stub IAT; an 8 MB high-entropy *executable* `.idata` holding the entry point is the wrapper itself.
-
-The v2.5 column is what we actually get to work with: five clean sections, entry point in `.text`, a full 429-entry import table, and code entropy of 6.27 — ordinary compiled x86. It disassembles directly.
-
-The build path `C:\rts2\Main\game\` names the engine: **rts2**, the second-generation Big Huge Games RTS engine, successor to the one behind Rise of Nations.
-
-### What the code actually is
-
-13.25 MB of x86 in `.text` — roughly six times the code volume of a 2000-era title like Crimson Skies, and 19.2 million instructions once decoded. This is the largest target attempted in this family so far, and the roadmap is written accordingly: the lifting is automated, the bring-up is not.
-
-C++ throughout, MSVC 7.1, `__thiscall` heavy, namespaced under `BHG::`. RTTI is present only for the CRT and iostreams — the game's own classes were built without it, so vtable recovery has to come from data-section pointer scanning rather than type descriptors.
-
-### Imports (unwrapped image, 427 across 21 DLLs)
-
-| DLL | Fns | What it says |
-|-----|-----|--------------|
-| kernel32 | 176 | files, threads, memory, `LoadLibraryA` |
-| user32 | 67 | window, message pump, input |
-| gdi32 | 30 | fonts, device contexts |
-| ws2_32 | 28 | multiplayer |
-| advapi32 | 21 | registry + CryptoAPI (key exchange for online play) |
-| winmm | 20 | timers, joystick |
-| imm32 | 15 | IME — full CJK text input |
-| binkw32 | 13 | RAD Bink video |
-| avifil32 | 11 | AVI capture (the in-game recorder) |
-| winhttp | 10 | the built-in updater |
-| oleaut32 / ole32 / rpcrt4 | 19 | COM plumbing |
-| pdh | 6 | performance counters — the engine profiles itself |
-| version / psapi / shell32 / shfolder | 8 | install paths, memory stats |
-| ddraw | 1 | `DirectDrawCreateEx` — adapter enumeration only |
-| dsound | 1 | ordinal 11 — `DirectSoundCreate8` |
-| wmvcore | 1 | Windows Media — the `.wma` voice-over bank |
-
-There is **no d3d9.dll import**. Direct3D is loaded dynamically at runtime, which is good news: the graphics layer already sits behind a late-bound seam we can intercept.
-
-### Middleware on the disc
-
-| Component | File | Note |
-|-----------|------|------|
-| NovodeX PhysX | `NxPhysics.dll`, `NxCooking.dll` | pre-Ageia PhysX 2.x; 32-bit, stays real |
-| RAD Bink | `binkw32.dll` | cut-scene playback, stays real |
-| SpeedTree RT | statically linked (`CSpeedTreeRT` symbols in `.text`) | lifted with the rest |
-| D3DX stub | `d3d8xstub.dll` | shipped shim over D3DX |
-| Fluid sim | `fluidModel.dll` | Big Huge Games' own |
-| Script compiler | `script_compiler.exe` | the game ships its own script toolchain |
-| Patch tooling | `patch.exe`, `patcher.dll`, `patchw32.dll`, `updater.exe` | RTPatch; latest official build is 2.5 |
-
-### Data formats to reverse
-
-`BIGS/*.big` archives (the binary's own `BigFile` class), XML rules and UI layout (`BXMLElement*`), `loc/<LANG>/` subtitles and fonts, `.bik` video, `.wma` voice-over, and a `StringLookup` binary string table built from XML at load time.
-
-## Roadmap
-
-### Phase 1 — Unwrap *(complete: there is nothing to unwrap)*
-
-The 2.5 patch installer is Inno Setup 5.5 wrapping eleven RTPatch deltas that step an install from build `0604.2001.0000` (retail, 20 April 2006) to `0704.1001.0000` (10 April 2007). No loose executable inside — `legends.exe` arrives as a compressed payload in the last delta, at a size that fits either a wrapped or an unwrapped build. The only way to settle it was to apply the chain.
-
-**Applying it, without installing anything.** The MSI wants a CD key and four disc swaps, so the install was assembled directly instead: the loose trees off discs 1 and 2, plus all 2,586 cabinet files resolved to their real names and directories through the MSI's own `File`, `Component` and `Directory` tables. Every extracted file matches the byte-count the MSI records for it. The result is a complete 2.8 GB v1.0 tree with no registry keys, no product activation and nothing installed system-wide.
-
-The shipped `patch.exe` is RTPatch 8.10, and it turns out to be transactional — it stages into temporary files and commits only on success — so each of the eleven deltas could be tried against an untouched tree in turn. Ten abort on a content mismatch. **The eleventh completes**, applying 51 files, which fits its 157 MB size: the final patch replaces files wholesale rather than diffing them, so it applies to any baseline.
-
-What it writes out is an unprotected executable. The wrapper is simply gone — no dumping, no import rebuilding, no reconstruction, and the version we get is the last official build rather than the shipping one.
-
-Two smaller things fell out of it. Windows auto-elevates anything named `patch.exe` by legacy installer heuristic, which `__COMPAT_LAYER=RunAsInvoker` bypasses without touching the system. And 15,548,416 — the size of the new executable — is one of the unidentified 32-bit fields I had found next to the filename in the RTPatch container earlier, which retroactively confirms it was the new-file-size field.
-
-### Phase 2 — Function discovery *(complete)*
-
-Recursive descent from the entry point, plus data-section scans for function pointers and vtable arrays. Nine discovery rounds, converging cleanly — the last round found 13 new targets:
-
-```
-[*] Data scan: 25513 functions reachable only via data pointers...
-[*] Successfully disassembled 72246 functions (9 discovery rounds)
-[*] Functions: 72246  (thunks=123, leaves=14212)
-[*] Instructions: 19,171,481
-[*] Byte coverage: 13,223,286 / 13,252,097 (99.8% of code range)
-```
-
-**Read the coverage, not the function count.** 99.8% means essentially the whole code range was reached and decoded — that is the number the lift depends on. The 72,246 is an upper bound with real inflation in it, and the symbol map measures how much:
-
-| Signal | Value | What it means |
-|--------|-------|---------------|
-| Named entries | 273 | Functions referencing exactly one scoped name |
-| Distinct names among them | **143** | So named entries outnumber named functions ~1.9 : 1 |
-| Duplicate-name address gaps under 4 KB | **113 of 130** | One function split into pieces, not two functions |
-| Entries under 16 bytes | 7,584 | Fragments and tails, not real functions |
-
-`Game::init` appearing at two addresses 363 bytes apart is not two functions; it is one function entered twice by the scan. That the naming pass doubles as a split-entry detector is a happy accident — the same evidence that names a function also proves when two entries are one.
-
-Two caveats on the 1.9 : 1 ratio: the named sample is startup code, which is unusually instrumented and may split differently from the rest, and it is 273 entries out of 72,246. It is a signal to go measure properly, not a correction factor to multiply by.
-
-So recovery was scored before committing to a lift, the way the [Trespasser](https://github.com/sp00nznet/trespasser) audit does it. See the scorecard below.
-
-### The scorecard — disasm32 against IDA Pro 9.1
-
-IDA analysed the same binary headlessly in **70 seconds** (against our 50 minutes) and found 32,662 functions. Scoring our 72,246 entries against it with `score_recovery.py`:
-
-| | |
+| Stage | State |
 |---|---|
-| True positives | 32,425 |
-| False positives | 39,821 — **31,763 split**, 8,058 invented |
-| False negatives | **237** |
-| **Precision** | **44.88%** |
-| **Recall** | **99.27%** |
+| Target build | done: **v2.5**, unprotected; Microsoft's last patch removed the disc protection ([install.md](docs/install.md), [recon.md](docs/recon.md)) |
+| Install from discs | done, scripted: 4 discs + the 2.5 patch -> `legends.exe` md5 `b0ebd5c3...`, no installer, no CD key |
+| Function catalog (`disasm32`) | 61,824 functions; against IDA 9.1: **recall 99.53%, precision 69.9%, exact ends 87.9%** ([catalog.md](docs/catalog.md)) |
+| Symbols from the binary's own strings | 143 functions named along the startup path |
+| Lift (`run_lift.py --all`) | **64,608 functions, 0 errors**, 22.5M lines of C |
+| Host (`build/rol.exe`, 32-bit, pcrecomp `native32`) | maps the image at `0x00400000`, binds 429/429 imports to the real DLLs, runs the lifted CRT ([host.md](docs/host.md)) |
+| Full build | **not finished**: a 3,000-function closure builds; the full 22.5M lines ran out of memory at 12 jobs and was paused |
+| Headless mode | `--headless --record out.mp4 --frames N` (from The Movies' host) |
+| Conformance harness | `tools/conformance.py`: **3/7 boot milestones** (mapped, bound, entered), 0 lift errors, against `conformance.json` |
 
-**Recall is the headline.** Of everything IDA finds, we miss 237 functions — 0.7%. The scan reaches essentially all the code, which is what 99.8% byte coverage promised and this independently confirms.
+These numbers were measured on pcrecomp `86fe9f5` (2026-10-02). pcrecomp has
+moved 158 commits since, including catalog, lifter and C++-exception fixes this
+binary needs; the next step is to recatalog and relift on its current `main`
+([ROADMAP.md](ROADMAP.md)).
 
-Precision is low, but the breakdown says the failure is benign. A false positive here is one of two very different defects, and `score_recovery.py` separates them because IDA supplies function *ranges* where a linker map supplies only starts:
+## Screenshots
 
-- **split** (31,763) — the address is *inside* a function IDA knows. One function entered twice. It duplicates code in a lift; it does not invent any.
-- **invented** (8,058) — the address is outside every known function. This is where data may have been decoded as code, and the only category that lifts to garbage.
+None yet: the game does not reach its first window. Screenshots go in
+`docs/screenshots/` when it does.
 
-Four of every five false positives are splits, so the tool over-segments rather than hallucinating. Where the splits come from:
+## Getting Started
 
-| Evidence | Value |
-|---|---|
-| Sampled splits that appear as a 4-byte pointer in the image | **53%** |
-| IDA functions absorbing splits | 6,722 |
-| Worst single function | **238** splits |
-| Share held by the worst 5% of those functions | 37% |
+You need **your own Rise of Legends discs** (the EN 4-CD retail set, or `.iso`
+images of them) and the **2.5 patch** (`RoL_Patch2.5.exe`). Nothing from the
+game is in this repository and nothing is downloaded for you.
 
-Half arrive through the data-pointer scan — jump tables, whose entries point *into* function bodies by design — and the concentration is the giveaway: a function taking 238 separate "starts" is one big switch statement being read as hundreds of functions.
+### Quick start
 
-Trespasser found the same concentration on a 1998 binary ("5% of functions absorb nearly all of them"). The same defect on two targets nine years and one C++ dialect apart makes this a property of the tool, not of either game — which is exactly the sort of thing this project exists to find out.
+1. Download this repository (the green **Code** button, then **Download ZIP**)
+   and unzip it somewhere with 25 GB free.
+2. Double-click **`Setup.cmd`**.
 
-### What the splits actually cost, and what actually causes them
+It checks for Python 3.10+, the `pefile` and `capstone` packages, the pcrecomp
+toolkit and (for the patch) `innoextract`, and **asks** before installing any
+of them. It asks for the folder holding your disc images, or for each disc in
+turn, and for the patch. Then it assembles the install, patches it to v2.5,
+builds the function catalog (about an hour) and lifts it. It asks before the
+build, which takes an hour or more and most of your memory. A rerun skips the
+finished steps. If it stops, it says why in one sentence, and the details are
+in `setup.log`. Everything runs at low priority.
 
-Three theories, two of them wrong, which is why each got measured.
+There is nothing to play yet, so it makes no shortcut.
 
-**Wrong: the splits are spurious and should be deleted.** They are load-bearing. `disasm32`'s own comments say a jump into another function's body is deliberately promoted to an entry point, because the lifter tail-dispatches to it and would otherwise leave the dispatch unresolved at runtime. Exception-handling funclets and switch arms genuinely need to be dispatchable. Delete them and the lift breaks.
+### Step by step
 
-**Wrong: unrecognised jump tables cause them.** Plausible — recursive descent cannot follow `jmp dword ptr [reg*4 + table]`, so arms stay uncovered and the data scan promotes each one. But IDA recovered **770 switches with 6,341 distinct arm targets**, at most 20% of the 31,763 splits. (A capstone probe suggested only 16 tables; that probe was unsound — a linear sweep desynchronises on data-in-code and covered 7.3% of the section. Discarded.)
-
-**Right: the entries are fine; the duplication is the defect.**
-
-| | |
-|---|---|
-| Instructions IDA counts in `.text` | 3,449,319 |
-| Instructions our catalog decoded | 19,171,481 |
-| **Duplication factor** | **5.6×** |
-
-`disassemble_function` decodes from its start address with no knowledge of what other functions already own, following jumps within a ±1 MB window. An entry landing mid-function therefore re-decodes that function's whole remainder. At 13.25 MB, lifting that catalog means emitting roughly 5.6× the C we need.
-
-(An earlier version of this number said 57.6×, computed from summed `size` fields. That was an artifact: `size` is `end - address`, and the tool's own comment warns that following a far jump inflates `end`. Mean entry size came out at 10,542 bytes against a median of 184. Instructions decoded is the sound measure.)
-
-So **precision against IDA was never the right target metric** — the entry set is largely correct. Duplication factor is. The fix is to thread the existing `owner` map into the decoder so a block stops when it reaches an instruction another function owns, recording a tail-transfer rather than copying the code. That spans the decoder, the catalog format and `lift32`, so it lands as one validated change rather than piecemeal into a toolbox fifteen projects share.
-
-### The fix, measured
-
-`tools/disasm32_owned.py` threads the `owner` map into the decoder, so an instruction is decoded into exactly one function and later entries that reach it stop there. Entries whose own start is already owned become `alias_of` records — no code, still in the catalog, still dispatchable — and the owner's block is split at that address to give the lifter a label to land on.
-
-| | legacy | ownership | |
-|---|---|---|---|
-| Instructions decoded | 19,171,481 | **3,527,728** | IDA counts 3,449,319 |
-| **Duplication** | 5.56× | **1.00×** | the point of the exercise |
-| Catalog entries | 72,246 | 57,507 | 2,464 of them aliases |
-| Precision vs IDA | 44.88% | **56.28%** | |
-| Recall vs IDA | 99.27% | 99.09% | **moved — see below** |
-| Byte coverage | 13,223,286 | 13,209,330 | **moved — see below** |
-
-**Coverage moved, and 92% of the move is a second fix.** Of the 13,956 bytes no longer covered, 12,849 lie outside every function IDA knows — legacy was decoding non-code, exactly the over-extension the tool's own comments warn about. The remaining **1,107 bytes are real code inside IDA functions**, and that is a genuine regression.
-
-**Recall moved too**, from 237 misses to 296. Those 59 functions are collateral of the same improvement: decoding 12,849 bytes of garbage occasionally decodes a `call` to a real function, so legacy found a handful of functions by accident. Stop decoding garbage and the accidents stop.
-
-Both regressions are small — 0.008% of the code range, 0.18% of recall — against removing 15.6 million redundant instruction decodes. They are recorded rather than rounded away, and neither is fixed yet.
-
-**A variant that was tried and reverted.** Letting an alias walk past its foreign start to pick up code its owner missed produced *byte-for-byte identical* coverage: the scan stops at the next foreign instruction regardless. Complexity for no measured gain, so it went. The reasoning behind it was simply wrong, and only re-running showed that.
-
-**A bug in our own scorer, found the hard way.** `score_recovery.py` rebuilt a 57,507-element set once per reference function — 32,662 times. It survived its first run on a quiet machine and died with `MemoryError` on the second. Fixed and pushed upstream. A measuring instrument that fails only under load is worse than none, because the first number it gives you looks fine.
-
-**A crash that was not our bug.** An earlier run died in capstone with `CS_ERR_MEM` while six other projects' disassemblers were running on the same machine; a plain process listing was timing out at the time. Re-running on an idle machine completed identically. Contention, not the change — but it took the re-run to know that rather than assume it.
-
-**A caveat that belongs on every number above.** Trespasser could build its own binary with a PDB, so it scored against real ground truth. There is no source for Rise of Legends, so IDA is a strong second opinion, not truth. The 8,058 "invented" entries in particular are unresolved: some will be data decoded as code, and some will be functions IDA declined to create. Those need looking at individually before anyone calls them errors.
-
-### Phase 3 — Symbol recovery *(seed complete)*
-
-`tools/symbols.py --functions` binds the harvested names to the functions that reference them:
+Prerequisites: Windows 10/11, **Python 3.10+** (`py -3 --version` should say
+`Python 3.10` or later), **git**, **innoextract 1.9+**
+(`winget install dscharrer.innoextract`), and pcrecomp cloned **beside** this
+repository as `pcrecomp-rol`:
 
 ```
-   174 strings naming a scoped symbol (182 distinct names)
-   172 of them referenced by code (453 sites)
-   297 functions reference a scoped name (273 of them exactly one)
+some-folder\
+  pcrecomp-rol\   <- git clone https://github.com/sp00nznet/pcrecomp pcrecomp-rol
+  rol\            <- this repository
 ```
 
-That yields **143 named functions** through the game's startup path — `Game::init`, `Game::setup_build_cities`, `GameOut::init_terrain_render`, `LaunchWin::set_status_string`. The engine announces each startup phase by name, so the strings map onto the boot sequence in order, which is exactly the region a bring-up has to walk first.
+Why each install step is the way it is: [docs/install.md](docs/install.md).
+Below, `D:\` is wherever each disc is (a drive, or a mounted `.iso`).
 
-Names only exist where the engine happened to instrument itself, so this is a seed covering a fraction of a percent of the binary. Its value is positional rather than statistical: it labels the path from `WinMain` to a running simulation.
+1. Python packages:
+   ```
+   py -3 -m pip install --user pefile capstone
+   ```
+2. The loose files from discs 1 and 2:
+   ```
+   robocopy "D:\program files\Microsoft Games\Rise Of Legends" _work\game /E
+   ```
+   (once with disc 1 in `D:`, once with disc 2)
+3. The installer's tables (disc 1), then each disc's cabinet (all four):
+   ```
+   powershell -ExecutionPolicy Bypass -File tools\dump_msi.ps1 "D:\Rise Of Legends.msi" _work\msi
+   expand -F:* D:\Disk1C~1.cab _work\cabstage
+   expand -F:* D:\Disk2C~1.cab _work\cabstage
+   expand -F:* D:\Disk3C~1.cab _work\cabstage
+   expand -F:* D:\Disk4C~1.cab _work\cabstage
+   ```
+   Make the two folders first (`mkdir _work\msi _work\cabstage`). Expected:
+   `_work\msi\file.tsv : 3538 rows`, and 2,595 files in `_work\cabstage`.
+4. Put them where the installer would:
+   ```
+   py -3 tools\place.py _work\msi _work\cabstage _work\game
+   ```
+   Expected: `placed 2586, outside the game tree 9, not in cabs 943` (the 943 are the loose files from step 2).
+5. Patch to v2.5 with the game's own RTPatch (`RunAsInvoker` stops Windows
+   elevating it):
+   ```
+   innoextract -e -m -d _work\patch25 RoL_Patch2.5.exe
+   mkdir _work\rtp
+   copy _work\game\patch.exe _work\rtp\rtp.exe
+   copy _work\game\patchw32.dll _work\rtp\
+   set __COMPAT_LAYER=RunAsInvoker
+   _work\rtp\rtp.exe _work\game _work\patch25\app\patches\RETAIL-0612.1201.0000-0.0704.1001.0000.RTP
+   certutil -hashfile _work\game\legends.exe MD5
+   ```
+   Expected: `b0ebd5c3154ffd6c0e779d77183000a0`.
+6. The vtables RTTI names, then the function catalog (about an hour):
+   ```
+   py -3 ..\pcrecomp-rol\tools\cpp\rtti.py _work\game\legends.exe -o _work\relift\rtti.json --seeds _work\relift\rtti_seeds.json
+   py -3 -u ..\pcrecomp-rol\tools\disasm\disasm32.py _work\game\legends.exe -o _work\relift\functions.json --seed-functions _work\relift\rtti_seeds.json
+   ```
+7. Lift it (about half an hour):
+   ```
+   py -3 run_lift.py --all --split 150
+   ```
 
-### Phase 4-6 — Lift, build, boot *(in progress)*
+The usual trip-ups: `python` opening the Microsoft Store (that is Windows'
+alias placeholder; use `py -3`, or turn the alias off in *Settings > Apps >
+Advanced app settings > App execution aliases*); a freshly installed tool not
+being on `PATH` until you open a new window; and disc images that are `.bin` or
+`.mdf` rather than `.iso` ([install.md](docs/install.md#disc-images-in-other-formats)).
 
-The relift follows [The Movies](https://github.com/sp00nznet/themovies), the closest proven title: a disasm32 catalog, `run_lift.py` over pcrecomp's `generate.py` + `lift32`, and a **32-bit MSVC host on pcrecomp's `runtime/native32`**. In that host the guest image sits 1:1 at `0x00400000`, and every import, `GetProcAddress` result and COM vtable is the real DLL behind one bridge. That matters here: PhysX, Bink, `fluidModel.dll` and `d3d8xstub.dll` are called as they are, with no hand-written shims.
+## Usage
 
-**Catalog (current pcrecomp `main`)**, scored against IDA 9.1 with aliases held out of precision:
+After *Building from source*, from the repository root:
 
-| | Sep (legacy) | Sep (ownership fix) | **Oct relift** |
-|---|---|---|---|
-| precision | 44.9% | 56.3% | **69.9%** |
-| recall | 99.27% | 99.09% | **99.53%** |
-| missed functions | 237 | 296 | **154** |
-| exact function ends | n/a | n/a | **87.9%** |
+```
+build\rol.exe --headless --run --watchdog 60            # boot, report where it stops
+build\rol.exe --headless --run --record _work\rec\boot.mp4 --frames 900
+build\rol.exe --help                                    # every option
+py -3 tools\conformance.py                              # how far it boots, against conformance.json
+```
 
-Upstream's extent clamping and interior checks beat this repo's own ownership-aware decoder on every axis, so `tools/disasm32_owned.py` is parked.
-
-**Lift:** 64,608 functions (2,784 branch targets outside the catalog added as entries), 0 errors, 67 without a terminator, 22.5M lines of C in 162 chunks.
-
-**The first host wall: 0x00400000 was taken.** RoL's image runs to `0x014ED000`, 4 MB further than The Movies'. In a host linked high, the process's own early allocations fill the low address space first-fit: the 16 MB initial stack took `0x00400000-0x01400000`, and the loader's heaps and mapped NLS files took the rest. So the host relaunches itself suspended, reserves the range in the child before its loader runs, and lets `image_loader` commit into the reservation. Releasing the range first does not work, because the loader `malloc`s the 15 MB file before mapping and the heap takes the hole. The initial stack is now 1 MB, which fits below the image, and the guest runs on a 16 MB thread.
-
-**First run** (3,000-function closure from the entry point, headless):
+`--headless` keeps everything off the screen (a hidden window, a forced
+windowed D3D9 device, message boxes to stderr), so it is safe over RDP. Today a
+run maps the image, binds every import, enters the entry point and stops at the
+first function the build did not include:
 
 ```
 [bind] 0x00400000: 417 native, 0 guest, 12 shimmed, 0 unresolved
@@ -266,79 +151,82 @@ Upstream's extent clamping and interior checks beat this repo's own ownership-aw
   entering 0x01066ED2
 
 [not-lifted] sub_010675AB  (called from 0x01065264)
-last indirect calls (newest first):
-  0x761041B0  from 0x010677A2  KERNEL32.dll!HeapFree
-  0x776BF650  from 0x010676E9  KERNEL32.dll!HeapAlloc
 ```
 
-The lifted CRT runs against the real heap and stops exactly at the edge of what was lifted.
+## Building from source
 
-**Where it paused:** the full 22.5M-line build. At 12 parallel jobs, `cl` died on 14 chunks of 30-50 MB each with no diagnostic (memory). Each one compiles alone in about 70 s. At `-j 6` the build made the workstation unusable and was stopped. Next time: smaller chunks (`--split 150`), low priority, and a capped `-j`.
-
-### Phase 7 — Platform layer
-
-Win32 through the existing compat layer. Direct3D is late-bound, so the seam is already there. DirectSound, Bink, PhysX and the D3DX stub are 32-bit DLLs sitting on the disc — they stay real and get called, not reimplemented.
-
-### Phase 8-10 — Assets, gameplay, modernisation
-
-`.big` mounting and XML rules first (nothing renders without them), then the simulation and render loop, then the things the original never had: proper widescreen, high DPI, modern input, and a multiplayer stack that does not depend on a service shut down years ago.
-
-## Provenance
-
-A recompilation is only as trustworthy as the bytes it starts from, and the widely circulating "ISO ALL-IN-ONE" EN set carries a scene crack alongside the retail files. That crack's unwrapped executable is useful as a *structural* reference — it proves what a correct unwrap should look like — but it is not something to build a pipeline on, and it is not evidence of what the genuine disc contains.
-
-So the target binary was checked against a disc nobody had touched.
-
-| Source | Standing | Note |
-|--------|----------|------|
-| **EN 4-CD set, from a physical collection** | **Clean** | Alcohol 120% dump of real discs (2022), 1200 dpi scans of media and manual, no crack directory. Read errors confined to sectors 1034-1043 — the protection's deliberately unreadable block, not game data |
-| Taiwan release, 4 discs | Verified | redump.org discs 81912-81915, but the Traditional Chinese build |
-| EN "ISO ALL-IN-ONE" | Tampered | Carries a scene crack directory; this is the widely circulated one |
-| Official 2.5 patch | n/a | The circulating copy is an unofficial German Inno wrapper around the real RTPatch deltas |
-
-Comparing every shipped binary across the clean dump and the circulated one:
+Needs the *Step by step* outputs plus **Visual Studio 2022** (any edition, or
+the Build Tools) with the C++ x86 tools, and **CMake 3.20+** with Ninja (both
+come with VS's C++ workload). The host is 32-bit on purpose: the guest image
+sits 1:1 at `0x00400000` and calls the game's own 32-bit DLLs
+([host.md](docs/host.md)).
 
 ```
-MATCH   legends.exe          40ff9fd21e13c878f41ba1d06688b46b
-MATCH   binkw32.dll  NxPhysics.dll  NxCooking.dll  d3d8xstub.dll
-MATCH   fluidModel.dll  patcher.dll  patchw32.dll  script_compiler.exe  (+6 more)
-DIFFER  mgspid.dll           81,920 bytes retail vs 57,344 bytes
+py -3 run_lift.py                 # quick: the 3,000-function closure from the entry point (~4 min)
+py -3 run_lift.py --all --split 150   # everything (22.5M lines, not committed)
+build.cmd -j 4                    # vcvarsall amd64_x86 + CMake + Ninja -> build\rol.exe
 ```
 
-One file differs, and it is the Microsoft Games product-ID DLL — the key check, which this project never calls. **`legends.exe` on the circulated image is byte-identical to the one on a physically dumped retail disc**, so every number in this README describes the genuine retail binary. That comparison is also its own control: it would have caught tampering in the executable, and it didn't.
+The full lift is big enough to matter: at 12 jobs `cl` ran out of memory, and
+at 6 it made the machine unusable. Build it on
+[netlab](https://github.com/sp00nznet/recomp-netlab) (`netlab build rol`,
+recipe `projects/rol.env`), or locally with a capped `-j` at low priority
+(`start /low /b /wait build.cmd -j 4`). `PCRECOMP` points the lifter and
+`-DPCRECOMP=` the build at another toolkit checkout; they must match.
 
-Since the target is now the v2.5 executable, produced by applying Microsoft's own patch to a clean install, the scene image and its unwrapped executable are not needed for anything. The chain from a physical disc to the binary we disassemble is: retail discs → MSI tables → assembled tree → official patch → `b0ebd5c3154ffd6c0e779d77183000a0`.
+Generated source is never distributed: `src/recomp/gen/` is derived from your
+own copy of the game and is gitignored.
 
-## Building (step by step)
-
-Prerequisites: Python 3.10+ with `pefile` and `capstone`, Visual Studio 2022 (or Build Tools) with the C++ x86 tools, CMake 3.20+ and Ninja, and pcrecomp checked out **beside** this repo as `../pcrecomp-rol` (this project pins its own worktree at `origin/main`). You also need your own v2.5 install at `_work/game/` (see Provenance).
-
-```
-python ../pcrecomp-rol/tools/cpp/rtti.py _work/game/legends.exe -o _work/relift/rtti.json --seeds _work/relift/rtti_seeds.json
-python -u ../pcrecomp-rol/tools/disasm/disasm32.py _work/game/legends.exe -o _work/relift/functions.json --seed-functions _work/relift/rtti_seeds.json   # ~65 min
-python run_lift.py            # 3,000-function closure from the entry point, ~4 min
-python run_lift.py --all      # everything, ~25 min, 22.5M lines
-build.cmd -j 4                # 32-bit host -> build/rol.exe
-build\rol.exe --headless --run --watchdog 60
-```
-
-**Generated source is never distributed.** `src/recomp/gen/` is derived from your own binary and is gitignored; this repo ships only the tools and the host.
-
-## Repository Layout
+## Layout
 
 ```
-config/         Analysis output (PE structure, import tables, disc catalog, recovery scores)
-docs/           Design notes and per-phase write-ups
-run_lift.py     Catalog -> src/recomp/gen/ (closure-limited or --all)
-CMakeLists.txt  32-bit MSVC host on pcrecomp runtime/native32; build.cmd drives it
-src/runtime/    host.c (mapping, binding, headless shims, fault report), input.c
-tools/
-  symbols.py    Harvest the binary's own method-name strings and their call sites
-                (`--selftest` runs its checks; no game files needed)
+rol/
+  Setup.cmd           the Quick start (runs tools\setup.ps1)
+  run_lift.py         lift driver: catalog -> src\recomp\gen\ (closure or --all)
+  CMakeLists.txt, build.cmd   the 32-bit host build
+  src/runtime/        host.c (address space, mapping, headless shims, fault report), input.c
+  src/recomp/gen/     lifted C (generated, gitignored)
+  tools/
+    setup.ps1         the same steps as "Step by step", with checks and a log
+    dump_msi.ps1, place.py   the installer's tables -> a real directory tree
+    symbols.py        names from the binary's own diagnostic strings (--selftest)
+    conformance.py    boot milestones and lift health against conformance.json
+  config/             measurements: PE headers, disc catalog, recovery scores
+  docs/
+    architecture.md   the parts and the data flow
+    install.md        discs -> v2.5: cabinets, MSI tables, RTPatch
+    recon.md          the binary, the engine, middleware, provenance
+    catalog.md        the function catalog scored against IDA, and the splits
+    host.md           the 32-bit host, the address-space wall, the build
+  _work/              your install, the catalog, symbol maps (gitignored)
 ```
 
-Generic analysis and lifting tools live in [pcrecomp](https://github.com/sp00nznet/pcrecomp) and are not duplicated here.
+The catalog, symbol maps and lifted code are derived from the game's binary,
+so they are never committed. Generic tools live in pcrecomp and are not
+duplicated here.
 
-## Legal
+## Contributing
 
-This repository contains analysis, tooling and original source code only. No game code, no game assets. You need your own retail copy of Rise of Legends for any of it to be useful. Rise of Nations: Rise of Legends is © 2006 Microsoft Corporation.
+See [CONTRIBUTING.md](CONTRIBUTING.md): where the gaps are, and why game files
+and lifted code never go in the repo.
+
+## License
+
+MIT for what is ours: the scripts, the host, the harness and the documentation
+([LICENSE](LICENSE)). It does not and cannot cover Rise of Legends itself. No
+game code, binaries or extracted assets are committed here, and you need your
+own copy for any of this to be useful. The lifted C is a derivative work of
+that binary; it is generated from your copy and carries whatever license the
+original carries, not this one.
+
+## Credits
+
+Rise of Nations: Rise of Legends © 2006 Microsoft Corporation, developed by Big
+Huge Games. This project is not affiliated with or endorsed by either, and
+neither contains nor distributes any part of the game.
+
+Built on [pcrecomp](https://github.com/sp00nznet/pcrecomp), which stands on
+[capstone](https://www.capstone-engine.org/) and
+[pefile](https://github.com/erocarrera/pefile). IDA Pro 9.1 was the scoring
+reference. The audit method is
+[Trespasser's](https://github.com/sp00nznet/trespasser).

@@ -425,7 +425,7 @@ static DWORD WINAPI watchdog(LPVOID unused) {
  * main() runs, the loader's heaps, NLS tables and mapped files have filled the
  * low address space first-fit -- straight through that range (docs/host.md).
  * So the host relaunches itself suspended, reserves the range in the child
- * before its loader initialises anything, and resumes it; image_loader then
+ * before its loader initializes anything, and resumes it; image_loader then
  * commits into the reservation. Only ntdll, this exe and the initial
  * stack exist at that point, which is why /STACK is 1 MB (it fits below
  * 0x00400000) and the guest runs on its own 16 MB thread instead. */
