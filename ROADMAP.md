@@ -1,10 +1,7 @@
 # Roadmap
 
 ## Next
-- Recatalog and relift on current pcrecomp `main` (158 commits past the
-  86fe9f5 the numbers came from): C++ exceptions for lifted code (eh32, #53),
-  guest setjmp/longjmp (#130), sign-flag and x87-compare fixes (#127, `fcom`),
-  SSE/SSE2, and catalog fixes (#67, #107, #129). Rescore against IDA.
+- Find why bodies with no terminator rose from 67 to 394 in the a85ea97 relift.
 - Build the full lift on netlab (`netlab build rol`), not the workstation.
 - Headless run of the full lift; follow faults to `WinMain` and the first
   window. Add each wall to `docs/host.md`.

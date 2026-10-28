@@ -20,18 +20,17 @@ style (layout, CLI, harness, headless mode), next to
 |---|---|
 | Target build | done: **v2.5**, unprotected; Microsoft's last patch removed the disc protection ([install.md](docs/install.md), [recon.md](docs/recon.md)) |
 | Install from discs | done, scripted: 4 discs + the 2.5 patch -> `legends.exe` md5 `b0ebd5c3...`, no installer, no CD key |
-| Function catalog (`disasm32`) | 61,824 functions; against IDA 9.1: **recall 99.53%, precision 69.9%, exact ends 87.9%** ([catalog.md](docs/catalog.md)) |
+| Function catalog (`disasm32`) | 69,524 functions, 97.8% of `.text`, 29 min; against IDA 9.1: **recall 99.54%, precision 82.7%, exact ends 94.7%** ([catalog.md](docs/catalog.md)) |
 | Symbols from the binary's own strings | 143 functions named along the startup path |
-| Lift (`run_lift.py --all`) | **64,608 functions, 0 errors**, 22.5M lines of C |
+| Lift (`run_lift.py --all --split 150`) | **69,558 functions, 0 errors**, 394 without a terminator, 3 unresolvable ITAIL labels, 33.4M lines of C |
 | Host (`build/rol.exe`, 32-bit, pcrecomp `native32`) | maps the image at `0x00400000`, binds 429/429 imports to the real DLLs, runs the lifted CRT ([host.md](docs/host.md)) |
-| Full build | **not finished**: a 3,000-function closure builds; the full 22.5M lines ran out of memory at 12 jobs and was paused |
+| Full build | **not finished**: a 3,000-function closure builds; the full lift (then 22.5M lines) ran out of memory at 12 jobs and was paused |
 | Headless mode | `--headless --record out.mp4 --frames N` (from The Movies' host) |
 | Conformance harness | `tools/conformance.py`: **3/7 boot milestones** (mapped, bound, entered), 0 lift errors, against `conformance.json` |
 
-These numbers were measured on pcrecomp `86fe9f5` (2026-10-02). pcrecomp has
-moved 158 commits since, including catalog, lifter and C++-exception fixes this
-binary needs; the next step is to recatalog and relift on its current `main`
-([ROADMAP.md](ROADMAP.md)).
+Catalog and lift: pcrecomp `a85ea97` (2026-10-28). The boot milestones are
+from a closure build on the older `86fe9f5`; the next step is building the new
+lift on netlab ([ROADMAP.md](ROADMAP.md)).
 
 ## Screenshots
 
@@ -163,7 +162,7 @@ sits 1:1 at `0x00400000` and calls the game's own 32-bit DLLs
 
 ```
 py -3 run_lift.py                 # quick: the 3,000-function closure from the entry point (~4 min)
-py -3 run_lift.py --all --split 150   # everything (22.5M lines, not committed)
+py -3 run_lift.py --all --split 150   # everything (33.4M lines, not committed)
 build.cmd -j 4                    # vcvarsall amd64_x86 + CMake + Ninja -> build\rol.exe
 ```
 

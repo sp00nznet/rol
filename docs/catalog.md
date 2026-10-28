@@ -5,22 +5,22 @@ against IDA Pro 9.1 (headless idalib) with pcrecomp's `score_recovery.py`. IDA
 is a strong second opinion here, not ground truth: there is no source or PDB
 for Rise of Legends. Scores are in `config/recovery_score*.json`.
 
-## Current (2026-10-02 relift, pcrecomp 86fe9f5)
+## Current (2026-10-28, pcrecomp a85ea97)
 
-| | Sep (legacy) | Sep (ownership fix) | **Oct relift** |
-|---|---|---|---|
-| precision | 44.9% | 56.3% | **69.9%** |
-| recall | 99.27% | 99.09% | **99.53%** |
-| missed functions | 237 | 296 | **154** |
-| exact function ends | n/a | n/a | **87.9%** |
+| | Sep (legacy) | Sep (ownership fix) | Oct 2 (86fe9f5) | **Oct 28 (a85ea97)** |
+|---|---|---|---|---|
+| precision | 44.9% | 56.3% | 69.9% | **82.7%** |
+| recall | 99.27% | 99.09% | 99.53% | **99.54%** |
+| missed functions | 237 | 296 | 154 | **149** |
+| exact function ends | n/a | n/a | 87.9% | **94.7%** |
+| false positives: split / invented | 31,763 / 8,058 | 17,598 / 7,543 | 7,335 / 6,650 | **2,064 / 4,746** |
+| byte coverage of `.text` | 99.8% | 99.7% | 95.0% | **97.8%** |
 
-61,824 catalog entries, aliases held out of precision. Upstream's extent
+The Oct 28 catalog: 69,524 entries (30,201 aliases, held out of precision),
+19,811,561 instructions, 29 minutes. Short ends fell from 3,638 to 1,408
+(median 143 bytes). Raw output: `_work/relift/score.log`. Upstream's extent
 clamping and interior checks beat this repo's own ownership-aware decoder on
 every axis, so that decoder was retired (it is in git history at `e68116e`).
-
-pcrecomp has moved 158 commits since 86fe9f5, several of them catalog fixes
-(zero fill is not a function, code addresses pushed into holes, data kept in
-code). These numbers predate them.
 
 ## The first catalog (2026-09-10)
 

@@ -10,11 +10,21 @@ lets them load from the game folder.
 
 Code: `src/runtime/host.c`, `CMakeLists.txt`, `build.cmd`.
 
-## The lift (2026-10-02, pcrecomp 86fe9f5)
+## The lift
 
-`run_lift.py --all`: 64,608 functions (2,784 branch targets outside the catalog
-added as entries), 0 errors, 67 without a terminator, 22.5M lines of C in 162
-chunks of 30-50 MB.
+| | Oct 2 (86fe9f5, `--split 400`) | **Oct 28 (a85ea97, `--split 150`)** |
+|---|---|---|
+| functions | 64,608 | **69,558** |
+| errors | 0 | 0 |
+| no terminator | 67 | **394** |
+| unresolvable ITAIL labels | 30 | **3** |
+| lines of C | 22.5M in 162 files | **33.4M in 464 files** |
+| time | ~25 min | 9 min |
+
+The new lift is 48% more C, from a catalog that covers 2.8 points more of
+`.text` and ends more functions exactly. The bodies with no terminator went
+from 67 to 394; that is a regression against `conformance.json` and is not
+diagnosed yet.
 
 ## The first wall: 0x00400000 was taken
 

@@ -5,6 +5,9 @@ All notable changes to this project. Format: [Keep a Changelog](https://keepacha
 ## [Unreleased]
 
 ### Added
+- Recatalog and relift on pcrecomp a85ea97: precision 69.9% -> 82.7%, exact
+  ends 87.9% -> 94.7%, coverage 95.0% -> 97.8%; 69,558 lifted, 0 errors,
+  33.4M lines. No-terminator bodies rose 67 -> 394 (not yet diagnosed).
 - `Setup.cmd` / `tools/setup.ps1`: the Quick start. Four discs (drives or
   `.iso`s, mounted natively) + the 2.5 patch -> v2.5 install -> catalog ->
   lift -> optional build and conformance check, skipping finished steps, at
