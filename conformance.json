@@ -1,8 +1,8 @@
 {
  "milestones": 3,
  "of": 7,
- "lifted": 64608,
+ "lifted": 69558,
  "errors": 0,
- "no_terminator": 67,
- "unresolved_itail": 30
+ "no_terminator": 394,
+ "unresolved_itail": 3
 }

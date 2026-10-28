@@ -22,9 +22,35 @@ Code: `src/runtime/host.c`, `CMakeLists.txt`, `build.cmd`.
 | time | ~25 min | 9 min |
 
 The new lift is 48% more C, from a catalog that covers 2.8 points more of
-`.text` and ends more functions exactly. The bodies with no terminator went
-from 67 to 394; that is a regression against `conformance.json` and is not
-diagnosed yet.
+`.text` and ends more functions exactly.
+
+**The 394 bodies "with no terminator" are not a regression.** `true_extent`
+calls a body clean only when some path reaches `ret`, `int3`, a tail call or
+another entry. A direct jump *backward*, below the body's own start, is none of
+those. The new catalog emits twice as many alias entries (15,331 -> 30,201),
+and the lift gives each one its own small body. Classified one by one:
+
+```
+  377  alias, exits only by a backward branch, inside an IDA function
+   12  start, exits only by a backward branch, inside an IDA function
+    4  alias, ends in call 0x0106A6BD (_CxxThrowException), then padding
+    1  alias, exits only by a backward branch, outside IDA's functions
+```
+
+The typical one is a block MSVC moved after its function's `ret`:
+
+```
+   0x0040B55A  ret
+  >0x0040B55B  cmp edi, ebx
+   0x0040B55D  je 0x40b4e7          ; back into the parent
+   0x0040B55F  lea ecx, [esp + 0x10]
+   0x0040B563  push ecx
+   0x0040B564  jmp 0x40b4bd         ; back into the parent
+```
+
+The lift turns those backward branches into dispatches (`RECOMP_ITAIL`), and
+only 3 of them cannot resolve, so the bodies run. The conformance baseline was
+reset to the new count for that reason.
 
 ## The first wall: 0x00400000 was taken
 

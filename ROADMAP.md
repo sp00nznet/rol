@@ -1,7 +1,6 @@
 # Roadmap
 
 ## Next
-- Find why bodies with no terminator rose from 67 to 394 in the a85ea97 relift.
 - Build the full lift on netlab (`netlab build rol`), not the workstation.
 - Headless run of the full lift; follow faults to `WinMain` and the first
   window. Add each wall to `docs/host.md`.

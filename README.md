@@ -22,7 +22,7 @@ style (layout, CLI, harness, headless mode), next to
 | Install from discs | done, scripted: 4 discs + the 2.5 patch -> `legends.exe` md5 `b0ebd5c3...`, no installer, no CD key |
 | Function catalog (`disasm32`) | 69,524 functions, 97.8% of `.text`, 29 min; against IDA 9.1: **recall 99.54%, precision 82.7%, exact ends 94.7%** ([catalog.md](docs/catalog.md)) |
 | Symbols from the binary's own strings | 143 functions named along the startup path |
-| Lift (`run_lift.py --all --split 150`) | **69,558 functions, 0 errors**, 394 without a terminator, 3 unresolvable ITAIL labels, 33.4M lines of C |
+| Lift (`run_lift.py --all --split 150`) | **69,558 functions, 0 errors**, 3 unresolvable ITAIL labels (394 "no terminator" bodies are aliases that branch back into their parent: [host.md](docs/host.md#the-lift)), 33.4M lines of C |
 | Host (`build/rol.exe`, 32-bit, pcrecomp `native32`) | maps the image at `0x00400000`, binds 429/429 imports to the real DLLs, runs the lifted CRT ([host.md](docs/host.md)) |
 | Full build | **not finished**: a 3,000-function closure builds; the full lift (then 22.5M lines) ran out of memory at 12 jobs and was paused |
 | Headless mode | `--headless --record out.mp4 --frames N` (from The Movies' host) |
