@@ -8,7 +8,7 @@
 
 ## Deferred
 - `.big` archive reader.
-- The ~6,650 "invented" catalog entries: data, or functions IDA missed.
+- The ~4,750 "invented" catalog entries: data, or functions IDA missed.
 - A native reference run of v2.5 on real Windows, recorded, as ground truth
   for frame comparisons.
 
