@@ -12,7 +12,7 @@ finds belongs there. Contributions to either are welcome.
 | **The full build** | Building 22.5M lines of lifted C within a normal machine's memory: chunk size, `/O1`, or a smarter split. | Medium |
 | **Boot** | Following faults from the CRT to `WinMain` and the first window ([docs/host.md](docs/host.md)). | Large, incremental |
 | **`.big` archives** | A reader for `BIGS/*.big` (the binary's `BigFile` class). | Medium |
-| **The "invented" catalog entries** | ~6,650 entries IDA does not call functions: which are data and which are functions IDA missed ([docs/catalog.md](docs/catalog.md)). Fixes go to pcrecomp's `disasm32`. | Medium |
+| **The "invented" catalog entries** | ~4,750 entries IDA does not call functions: which are data and which are functions IDA missed ([docs/catalog.md](docs/catalog.md)). Fixes go to pcrecomp's `disasm32`. | Medium |
 
 ## Ground rules
 
