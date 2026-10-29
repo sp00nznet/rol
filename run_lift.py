@@ -22,6 +22,7 @@ disassembler pass names them, and an unresolved slot answers eax = 0.
     py -3 run_lift.py --all
 """
 import argparse
+from collections import defaultdict
 import json
 import os
 import sys
@@ -35,7 +36,7 @@ sys.path.insert(0, os.path.join(_TOOLS, 'lift'))
 sys.path.insert(0, os.path.join(_TOOLS, 'pe'))
 
 from capstone import Cs, CS_ARCH_X86, CS_MODE_32          # noqa: E402
-from generate import (EXTENT_REACH, closure, find_splits, true_extent,  # noqa: E402
+from generate import (EXTENT_REACH, alias_stub, closure, find_splits, true_extent,  # noqa: E402
                       linear_disassemble_function, lift_function_linear, write_chunk)
 from lift32 import Lifter                                  # noqa: E402
 from pe_analyze import analyze_pe, build_iat_map           # noqa: E402
@@ -130,7 +131,7 @@ def main():
             idx += 1
             chunk = []
 
-    def lift_one(addr, name, end, reached):
+    def lift_one(addr, name, end, reached, aliases=None):
         nonlocal errors
 
         try:
@@ -139,7 +140,7 @@ def main():
                               if end > addr else ([], None))
             if leaders is not None:
                 leaders.add(addr)
-            body = (lift_function_linear(lifter, name, insns, leaders, addr) if insns
+            body = (lift_function_linear(lifter, name, insns, leaders, addr, alias_entries=aliases) if insns
                     else 'void %s(void) { }\n' % name)
         except Exception as e:                      # noqa: BLE001 -- counted, not hidden
             body = '/* ERROR %s: %s */\nvoid %s(void) { }\n' % (name, e, name)
@@ -158,23 +159,58 @@ def main():
     # jump table before it decoded over it. Either way the target has to be dispatchable,
     # or the RECOMP_ITAIL cannot resolve. So each round's outside targets
     # become entries and are lifted in the next round, until none are new.
-    todo, added = sorted(chosen), 0
+    def walk(addr):
+        reached, behind, called = set(), set(), set()
+        end, clean = true_extent(md, code, cs, addr, min(addr + EXTENT_REACH, ce), starts,
+                                 reached=reached, behind=behind, called=called)
+        return end, clean, reached, {t for t in behind if t not in reached} | called
+
+    # An entry whose code another body already lifts (an alias, a split) is
+    # entered there through a stub (generate.alias_stub), not lifted again:
+    # as copies, aliases were 75% of the C and one 40 KB function became
+    # 202 MB, more than a builder's memory. So walk the real starts first and
+    # record which body owns each instruction.
+    first = sorted(a for a in chosen if a in starts)
+    walked, owner = {}, {}
+    for addr in first:
+        walked[addr] = walk(addr)
+        for va in walked[addr][2]:
+            owner.setdefault(va, addr)
+    # A start can be inside another body too: the walk before it fell through
+    # into it, which true_extent reads as a false start in that body (the 40 KB
+    # function at 0x008BC530 held five, each re-lifting ~18k instructions). A
+    # stub only ever enters a body that is lifted itself, never another stub.
+    def host(a):
+        o = owner.get(a)
+        return o if o is not None and o != a and owner.get(o) == o else None
+    inside = defaultdict(list)            # host body -> entries it carries
+    for addr in sorted(chosen):
+        if host(addr) is not None:
+            inside[host(addr)].append(addr)
+    stubbed = 0
+    todo, added, outside = sorted(chosen), 0, set()
     while todo:
-        outside = set()
         for addr in todo:
             name = 'sub_%08X' % addr
-            reached, behind, called = set(), set(), set()
-            end, clean = true_extent(md, code, cs, addr, min(addr + EXTENT_REACH, ce), starts,
-                                     reached=reached, behind=behind, called=called)
-            outside |= {t for t in behind if t not in reached} | called
+            if host(addr) is not None:
+                chunk.append((alias_stub(name, addr, 'sub_%08X' % host(addr)), addr, name))
+                walked.pop(addr, None)
+                entries.append((addr, name))
+                stubbed += 1
+                flush()
+                continue
+            end, clean, reached, out = walked.pop(addr, None) or walk(addr)
+            outside |= out
             dirty += not clean
-            lift_one(addr, name, end, reached)
+            lift_one(addr, name, end, reached, inside.get(addr))
         todo = sorted(t for t in outside if cs <= t < ce and t not in byaddr)
+        outside = set()
         for t in todo:
             byaddr[t] = {'address': t, 'end': ce, 'calls_to': [], 'entry_kind': 'start'}
             chosen.add(t)
         added += len(todo)
     print('[*] branch and call targets outside the catalog, added as entries: %d' % added)
+    print('[*] entries lifted as a stub into the body that owns their code: %d' % stubbed)
 
     stubs = [a for a in ordered if a not in chosen]
     for a in stubs:
@@ -202,7 +238,7 @@ def main():
 
     lines = sum(sum(1 for _ in open(os.path.join(args.out, fn), encoding='utf-8', errors='replace'))
                 for fn in os.listdir(args.out))
-    stats = {'lifted': len(chosen), 'stubs': len(stubs), 'errors': errors,
+    stats = {'lifted': len(chosen), 'stubs': len(stubs), 'alias_stubs': stubbed, 'errors': errors,
              'no_terminator': dirty, 'files': idx, 'lines': lines}
     json.dump(stats, open(STATS, 'w'), indent=1)
     print('=' * 60)

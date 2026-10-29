@@ -14,23 +14,28 @@ tools get wrong goes back upstream. This repo follows pcrecomp's shared house
 style (layout, CLI, harness, headless mode), next to
 [The Movies](https://github.com/sp00nznet/themovies), its closest sibling.
 
-## Status: **v0.1.0-dev, alpha (bring-up). The whole game lifts with 0 errors; the lifted CRT runs, and nothing renders yet.**
+## Status: **v0.1.0-dev, alpha (bring-up). The whole game lifts, builds and runs its own start-up, to its own error box; nothing renders yet.**
 
 | Stage | State |
 |---|---|
 | Target build | done: **v2.5**, unprotected; Microsoft's last patch removed the disc protection ([install.md](docs/install.md), [recon.md](docs/recon.md)) |
 | Install from discs | done, scripted: 4 discs + the 2.5 patch -> `legends.exe` md5 `b0ebd5c3...`, no installer, no CD key |
-| Function catalog (`disasm32`) | 69,524 functions, 97.8% of `.text`, 29 min; against IDA 9.1: **recall 99.54%, precision 82.7%, exact ends 94.7%** ([catalog.md](docs/catalog.md)) |
+| Function catalog (`disasm32`) | 70,864 functions, 30 min; against IDA 9.1: **recall 99.55%, precision 81.3%, exact ends 94.0%** ([catalog.md](docs/catalog.md)) |
 | Symbols from the binary's own strings | 143 functions named along the startup path |
-| Lift (`run_lift.py --all --split 150`) | **69,558 functions, 0 errors**, 3 unresolvable ITAIL labels (394 "no terminator" bodies are aliases that branch back into their parent: [host.md](docs/host.md#the-lift)), 33.4M lines of C |
+| Lift (`run_lift.py --all --split 150`) | **70,867 functions, 0 errors**, 8.0M lines of C; 31,820 alias entries enter their parent's body instead of copying it ([host.md](docs/host.md#the-lift)) |
 | Host (`build/rol.exe`, 32-bit, pcrecomp `native32`) | maps the image at `0x00400000`, binds 429/429 imports to the real DLLs, runs the lifted CRT ([host.md](docs/host.md)) |
-| Full build | **not finished**: a 3,000-function closure builds; the full lift (then 22.5M lines) ran out of memory at 12 jobs and was paused |
+| Full build | **done on netlab**: clang-cl, 476 objects, about an hour on 12 cores -> `build-farm/rol.exe` |
 | Headless mode | `--headless --record out.mp4 --frames N` (from The Movies' host) |
-| Conformance harness | `tools/conformance.py`: **3/7 boot milestones** (mapped, bound, entered), 0 lift errors, against `conformance.json` |
+| Conformance harness | `tools/conformance.py`: **4/8 boot milestones** (mapped, bound, entered, the game's own first dialog), 0 lift errors, against `conformance.json` |
 
-Catalog and lift: pcrecomp `a85ea97` (2026-10-28). The boot milestones are
-from a closure build on the older `86fe9f5`; the next step is building the new
-lift on netlab ([ROADMAP.md](ROADMAP.md)).
+Where it stops: the game reports `BIGS\strings.big` as corrupt, which it is
+not ([host.md](docs/host.md#where-it-stops-now-stringsbig-is-corrupt)).
+
+Built on pcrecomp `main` (a85ea97) plus three open pull requests this game
+turned up: **#150** (`cmpxchg8b` was a no-op: the heap's lock spun forever),
+**#151** (alias entries enter their parent instead of copying it: 75% of the C
+was copies), **#152** (a jump-table target on a label inside another handler).
+Until they merge, build against a pcrecomp with all three merged in.
 
 ## Screenshots
 

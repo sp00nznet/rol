@@ -5,6 +5,12 @@ All notable changes to this project. Format: [Keep a Changelog](https://keepacha
 ## [Unreleased]
 
 ### Added
+- `run_lift.py`: entries whose code a lifted body already owns (aliases, and
+  starts the walk before them falls into) lift as stubs into that body (needs
+  pcrecomp #151). 33.4M lines -> 8.0M, 394 no-terminator bodies -> 5.
+- The full lift builds on netlab and runs past the CRT, Rockall's heap and the
+  x87 dispatch to the game's own "strings.big is corrupt" box (needs pcrecomp
+  #150, #152). Conformance: 4/8 milestones, with a new one for that dialog.
 - Recatalog and relift on pcrecomp a85ea97: precision 69.9% -> 82.7%, exact
   ends 87.9% -> 94.7%, coverage 95.0% -> 97.8%; 69,558 lifted, 0 errors,
   33.4M lines. No-terminator bodies rose 67 -> 394: alias bodies that exit by

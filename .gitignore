@@ -38,3 +38,4 @@ config/symbols*.json
 # Setup log
 setup.log
 __pycache__/
+build-farm/

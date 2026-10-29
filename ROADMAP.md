@@ -1,9 +1,11 @@
 # Roadmap
 
 ## Next
-- Build the full lift on netlab (`netlab build rol`), not the workstation.
-- Headless run of the full lift; follow faults to `WinMain` and the first
-  window. Add each wall to `docs/host.md`.
+- Find why the game calls `BIGS\strings.big` corrupt (a lifted read, a
+  decompressor or a checksum; the MMX ops still unimplemented are suspects).
+- Follow the boot to the first window. Add each wall to `docs/host.md`.
+- Land pcrecomp #150, #151, #152, then pin to `main` again.
+- The overlapping walks at `0x008BC530` (one 27 MB chunk).
 
 ## Deferred
 - `.big` archive reader.

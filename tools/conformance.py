@@ -27,7 +27,9 @@ import subprocess
 import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-HOST = os.path.join(ROOT, 'build', 'rol.exe')
+# The netlab build (build-farm/) when there is one, else a local build.
+HOST = next((p for p in (os.path.join(ROOT, 'build-farm', 'rol.exe'), os.path.join(ROOT, 'build', 'rol.exe'))
+             if os.path.exists(p)), os.path.join(ROOT, 'build', 'rol.exe'))
 GAME = os.path.join(ROOT, '_work', 'game')
 GEN = os.path.join(ROOT, 'src', 'recomp', 'gen')
 STATS = os.path.join(ROOT, '_work', 'relift', 'lift_stats.json')
@@ -38,6 +40,9 @@ MILESTONES = [
     ('image mapped at 0x00400000', r'mapped .*: 0x00400000-0x014ED000'),
     ('every import bound', r'\[bind\] 0x00400000: .* 0 unresolved'),
     ('entry point entered', r'entering 0x01066ED2'),
+    # Past the CRT, the heap and the x87 dispatch, into the game's own start-up:
+    # its first message box or window, whichever comes first.
+    ('game code reaches its first dialog or window', r'\[messagebox\]|\[headless\] CreateWindowExA\('),
     ('window created', r'\[headless\] CreateWindowExA\('),
     ('D3D9 device created', r'\[headless\] CreateDevice -> 0x00000000'),
     ('first frame presented', r'\[headless\] frame 1 presented'),
@@ -75,7 +80,7 @@ def main():
     ap.add_argument('--seconds', type=int, default=60, help='headless run length')
     args = ap.parse_args()
     if not (os.path.exists(HOST) and os.path.isdir(GAME) and os.path.exists(STATS)):
-        print('conformance: skipped -- needs _work/game (your copy), the lift and build/rol.exe '
+        print('conformance: skipped -- needs _work/game (your copy), the lift and build-farm/rol.exe or build/rol.exe '
               '(README, Getting Started)')
         return 0
 
