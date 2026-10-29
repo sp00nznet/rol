@@ -83,6 +83,36 @@ The lift turns those backward branches into dispatches (`RECOMP_ITAIL`), and
 only 3 of them cannot resolve, so the bodies run. With alias stubs, 389 of
 them are stubs and the count is 5.
 
+## The first wall: 0x00400000 was taken
+
+RoL's image runs to `0x014ED000`, 4 MB further than The Movies'. In a host
+linked high, the process's own early allocations fill low address space
+first-fit: the 16 MB initial stack took `0x00400000-0x01400000`, and the
+loader's heaps and mapped NLS files took the rest.
+
+So the host relaunches itself suspended, reserves the range in the child before
+its loader runs, and lets `image_loader` commit into the reservation. Releasing
+the range first does not work: the loader `malloc`s the 15 MB file before
+mapping, and the heap takes the hole. The initial stack is 1 MB, which fits
+below the image, and the guest runs on a 16 MB thread. When mapping fails, the
+host lists what occupies the range.
+
+## First run (3,000-function closure, headless)
+
+```
+[bind] 0x00400000: 417 native, 0 guest, 12 shimmed, 0 unresolved
+  mapped _work\game\legends.exe: 0x00400000-0x014ED000
+  entering 0x01066ED2
+
+[not-lifted] sub_010675AB  (called from 0x01065264)
+last indirect calls (newest first):
+  0x761041B0  from 0x010677A2  KERNEL32.dll!HeapFree
+  0x776BF650  from 0x010676E9  KERNEL32.dll!HeapAlloc
+```
+
+The lifted CRT runs against the real heap and stops exactly at the edge of what
+was lifted.
+
 ## The second wall: the heap's lock spun forever (cmpxchg8b)
 
 The full build ran past the CRT, then sat in one function for the whole
@@ -120,51 +150,40 @@ ITAIL: unresolved VA 0x0106E7AD from 0x0106E6A0
 scan dropped it as a label. pcrecomp #152 keeps a pointer that sits in a run of
 code pointers as an entry (an alias); it kept 678 on this binary.
 
-## Where it stops now: "strings.big is corrupt"
+## The fourth wall: "strings.big is corrupt" (the host's own path)
 
 ```
 [messagebox] type 0x10 -> 1: Fatal String Error: The following files are either corrupt or missing:
 
 .\BIGS\strings.big
 .\BIGS\nonloc_strings.big
-
-The program will now exit.
 ```
 
-Both files are there (6,317,911 and 286,141 bytes) and the original game reads
-them, so a lifted path that opens, reads or checks them is wrong. Not
-diagnosed yet. Still unimplemented in the lift and worth suspecting: 1,088
-`pmaddwd`, 384 `punpck[lh]dq`, 35 `paddsw` (MMX), 6 `pushf`, 4 `popf`.
-
-## The first wall: 0x00400000 was taken
-
-RoL's image runs to `0x014ED000`, 4 MB further than The Movies'. In a host
-linked high, the process's own early allocations fill low address space
-first-fit: the 16 MB initial stack took `0x00400000-0x01400000`, and the
-loader's heaps and mapped NLS files took the rest.
-
-So the host relaunches itself suspended, reserves the range in the child before
-its loader runs, and lets `image_loader` commit into the reservation. Releasing
-the range first does not work: the loader `malloc`s the 15 MB file before
-mapping, and the heap takes the hole. The initial stack is 1 MB, which fits
-below the image, and the guest runs on a 16 MB thread. When mapping fails, the
-host lists what occupies the range.
-
-## First run (3,000-function closure, headless)
+Both files were there. The native trace showed the game never opened them:
 
 ```
-[bind] 0x00400000: 417 native, 0 guest, 12 shimmed, 0 unresolved
-  mapped _work\game\legends.exe: 0x00400000-0x014ED000
-  entering 0x01066ED2
-
-[not-lifted] sub_010675AB  (called from 0x01065264)
-last indirect calls (newest first):
-  0x761041B0  from 0x010677A2  KERNEL32.dll!HeapFree
-  0x776BF650  from 0x010676E9  KERNEL32.dll!HeapAlloc
+[native] KERNEL32.dll!GetModuleFileNameW  (00000000 04B9DFA0 00000104 00000000) from sub_00D69C30 -> 00000023
+[native] KERNEL32.dll!SetCurrentDirectoryW (04C9C000 ...) from sub_00D69C30 -> 00000001
+[native] KERNEL32.dll!FindFirstFileW      (0121B730 ...) from sub_01068CB5 -> FFFFFFFF
+[native] KERNEL32.dll!GetLastError        (...) from sub_01068CB5 -> 00000003
 ```
 
-The lifted CRT runs against the real heap and stops exactly at the edge of what
-was lifted.
+35 characters is `G:\recomp\pc\rol\build-farm\rol.exe`: the game sets its current directory
+from its own path, got the host's, and every `.\BIGS\` lookup was
+`ERROR_PATH_NOT_FOUND`. The host from The Movies shimmed only the ANSI calls;
+`host.c` now answers `GetModuleFileNameW`, `GetModuleHandleW` and
+`GetCommandLineW` with the guest's `legends.exe` too.
+
+## Where it stops now: the EULA dialog
+
+With its files found, the game reads 48 of them and then calls
+`eula.dll!EBUEula` (Microsoft's EULA dialog) with
+`"Software\Microsoft\Microsoft Games\Rise of Legends"` and `"EULA.RTF"`. Headless,
+the dialog is a hidden window nobody can click, so the run waits there.
+
+`EBUEula` reads `HKCU\Software\Microsoft\Microsoft Games\Rise of Legends\FIRSTRUN`
+(a DWORD) and skips the dialog when it is non-zero; clicking **Accept** writes
+it. A normal install has it set after the first launch.
 
 ## The full build, and why it stopped
 

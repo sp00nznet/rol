@@ -32,6 +32,11 @@ All notable changes to this project. Format: [Keep a Changelog](https://keepacha
 - CHANGELOG, ROADMAP.
 - Phase 2: function catalog for v2.5 `legends.exe`, scored against IDA 9.1.
 
+### Fixed
+- Host: `GetModuleFileNameW`, `GetModuleHandleW` and `GetCommandLineW` answer
+  with the guest's `legends.exe`. With the host's path the game moved into
+  `build-farm\` and called every `BIGS\*.big` corrupt.
+
 ### Changed
 - README in the house order (status, Getting Started with both routes, usage,
   build, license); the scope notice moved from LICENSE, which is plain MIT again.

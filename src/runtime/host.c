@@ -258,6 +258,50 @@ static void shim_GetCommandLineA(void) {
     g_esp += 4;
 }
 
+/* Rise of Legends asks the wide versions. With the host's path from
+ * GetModuleFileNameW it set its current directory to build-farm\ and every
+ * .\BIGS\ file was ERROR_PATH_NOT_FOUND: "strings.big is corrupt or missing". */
+static wchar_t g_guest_exe_w[MAX_PATH], g_guest_cmdline_w[MAX_PATH + 3];
+
+static void guest_paths_w(void) {
+    if (!g_guest_exe_w[0]) {
+        MultiByteToWideChar(CP_ACP, 0, g_guest_exe, -1, g_guest_exe_w, MAX_PATH);
+        MultiByteToWideChar(CP_ACP, 0, g_guest_cmdline, -1, g_guest_cmdline_w, MAX_PATH + 3);
+    }
+}
+
+static void shim_GetModuleHandleW(void) {
+    g_eax = ARG(0) ? (uint32_t)(uintptr_t)GetModuleHandleW((LPCWSTR)(uintptr_t)ARG(0))
+                   : ROL_IMAGE_BASE;
+    g_esp += 4 + 1 * 4;
+}
+
+static void shim_GetModuleFileNameW(void) {
+    uint32_t h = ARG(0), size = ARG(2);
+    wchar_t* out = (wchar_t*)(uintptr_t)ARG(1);
+    if (h == 0 || h == ROL_IMAGE_BASE) {
+        uint32_t n;
+        guest_paths_w();
+        n = (uint32_t)wcslen(g_guest_exe_w);
+        if (size) {
+            uint32_t k = n < size ? n : size - 1;
+            memcpy(out, g_guest_exe_w, k * sizeof(wchar_t));
+            out[k] = 0;
+            n = k;
+        }
+        g_eax = n;
+    } else {
+        g_eax = GetModuleFileNameW((HMODULE)(uintptr_t)h, out, size);
+    }
+    g_esp += 4 + 3 * 4;
+}
+
+static void shim_GetCommandLineW(void) {
+    guest_paths_w();
+    g_eax = (uint32_t)(uintptr_t)g_guest_cmdline_w;
+    g_esp += 4;
+}
+
 /* SIMD the guest may use. D3DX-style code picks SSE/3DNow! paths by CPUID
  * and IsProcessorFeaturePresent, and lift32 implements few of those
  * instructions (16,977 unimplemented sites in this lift, nearly all SIMD), so
@@ -285,7 +329,10 @@ static void hide_simd(void) {
     { "IsProcessorFeaturePresent", shim_IsProcessorFeaturePresent }, \
     { "GetModuleHandleA", shim_GetModuleHandleA }, \
     { "GetModuleFileNameA", shim_GetModuleFileNameA }, \
-    { "GetCommandLineA", shim_GetCommandLineA }
+    { "GetCommandLineA", shim_GetCommandLineA }, \
+    { "GetModuleHandleW", shim_GetModuleHandleW }, \
+    { "GetModuleFileNameW", shim_GetModuleFileNameW }, \
+    { "GetCommandLineW", shim_GetCommandLineW }
 
 static native32_shim_t g_shims[] = { GUEST_SHIMS };
 

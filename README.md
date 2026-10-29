@@ -29,7 +29,7 @@ style (layout, CLI, harness, headless mode), next to
 | Conformance harness | `tools/conformance.py`: **4/8 boot milestones** (mapped, bound, entered, the game's own first dialog), 0 lift errors, against `conformance.json` |
 
 Where it stops: the game reports `BIGS\strings.big` as corrupt, which it is
-not ([host.md](docs/host.md#where-it-stops-now-stringsbig-is-corrupt)).
+([host.md](docs/host.md#where-it-stops-now-the-eula-dialog)).
 
 Built on pcrecomp `main` (a85ea97) plus three open pull requests this game
 turned up: **#150** (`cmpxchg8b` was a no-op: the heap's lock spun forever),

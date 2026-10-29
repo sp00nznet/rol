@@ -1,8 +1,7 @@
 # Roadmap
 
 ## Next
-- Find why the game calls `BIGS\strings.big` corrupt (a lifted read, a
-  decompressor or a checksum; the MMX ops still unimplemented are suspects).
+- Get past the EULA dialog headless (`HKCU\...\Rise of Legends\FIRSTRUN`).
 - Follow the boot to the first window. Add each wall to `docs/host.md`.
 - Land pcrecomp #150, #151, #152, then pin to `main` again.
 - The overlapping walks at `0x008BC530` (one 27 MB chunk).
