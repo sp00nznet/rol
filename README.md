@@ -26,11 +26,10 @@ style (layout, CLI, harness, headless mode), next to
 | Host (`build/rol.exe`, 32-bit, pcrecomp `native32`) | maps the image at `0x00400000`, binds 429/429 imports to the real DLLs, runs the lifted CRT ([host.md](docs/host.md)) |
 | Full build | **done on netlab**: clang-cl, 476 objects, about an hour on 12 cores -> `build-farm/rol.exe` |
 | Headless mode | `--headless --record out.mp4 --frames N` (from The Movies' host) |
-| Conformance harness | `tools/conformance.py`: **4/8 boot milestones** (mapped, bound, entered, the game's own first dialog), 0 lift errors, against `conformance.json` |
+| Conformance harness | `tools/conformance.py`: **6/8 boot milestones** (mapped, bound, entered, its window, a D3D9 device), 0 lift errors, against `conformance.json` |
 
-Where it stops: the product-key check. The game wants the product ID the
-installer writes from your CD key; `tools/register_key.ps1` registers your own
-key with the game's own dialog ([host.md](docs/host.md#where-it-stops-now-the-product-key)).
+Where it stops: a fault in lifted code right after the D3D9 device is created
+([host.md](docs/host.md#where-it-stops-now-a-fault-after-the-d3d9-device)).
 
 Built on pcrecomp `main` (a85ea97) plus three open pull requests this game
 turned up: **#150** (`cmpxchg8b` was a no-op: the heap's lock spun forever),
@@ -58,7 +57,10 @@ game is in this repository and nothing is downloaded for you.
 It checks for Python 3.10+, the `pefile` and `capstone` packages, the pcrecomp
 toolkit and (for the patch) `innoextract`, and **asks** before installing any
 of them. It asks for the folder holding your disc images, or for each disc in
-turn, and for the patch. Then it assembles the install, patches it to v2.5,
+turn, and for the patch. Then it assembles the install and patches it to
+v2.5. It asks whether you accept the game's EULA, and for the product key from
+your disc case, which it registers with the game's own key check (pass
+`Setup.cmd -Key XXXXX-XXXXX-XXXXX-XXXXX-XXXXX` to skip that prompt). Then it
 builds the function catalog (about an hour) and lifts it. It asks before the
 build, which takes an hour or more and most of your memory. A rerun skips the
 finished steps. If it stops, it says why in one sentence, and the details are
@@ -118,12 +120,23 @@ Below, `D:\` is wherever each disc is (a drive, or a mounted `.iso`).
    certutil -hashfile _work\game\legends.exe MD5
    ```
    Expected: `b0ebd5c3154ffd6c0e779d77183000a0`.
-6. The vtables RTTI names, then the function catalog (about an hour):
+6. Your license, which the MSI would otherwise ask for. Read
+   `_work\game\EULA.RTF`; if you accept it, record that the way its **Accept**
+   button does. Then register the product key from your disc case with the
+   game's own key check (Windows asks for admin once):
+   ```
+   reg add "HKCU\Software\Microsoft\Microsoft Games\Rise of Legends" /v FIRSTRUN /t REG_DWORD /d 1 /f
+   powershell -ExecutionPolicy Bypass -File tools\register_key.ps1 -Key XXXXX-XXXXX-XXXXX-XXXXX-XXXXX
+   ```
+   Expected: `Registered. Product ID: 77277-124-...`. Without `-Key` it opens
+   the key dialog for you to type into. Without a product ID the game quits
+   at start-up with no message ([host.md](docs/host.md#the-product-key)).
+7. The vtables RTTI names, then the function catalog (about an hour):
    ```
    py -3 ..\pcrecomp-rol\tools\cpp\rtti.py _work\game\legends.exe -o _work\relift\rtti.json --seeds _work\relift\rtti_seeds.json
    py -3 -u ..\pcrecomp-rol\tools\disasm\disasm32.py _work\game\legends.exe -o _work\relift\functions.json --seed-functions _work\relift\rtti_seeds.json
    ```
-7. Lift it (about half an hour):
+8. Lift it (about half an hour):
    ```
    py -3 run_lift.py --all --split 150
    ```

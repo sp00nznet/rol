@@ -191,7 +191,7 @@ yourself:
 reg add "HKCU\Software\Microsoft\Microsoft Games\Rise of Legends" /v FIRSTRUN /t REG_DWORD /d 1 /f
 ```
 
-## Where it stops now: the product key
+## The product key
 
 Past the EULA, the game calls `mgspid.dll!GetPidx(HKLM, "SOFTWARE\Microsoft\Microsoft Games\Rise of Legends", "Rise of Legends", buf)`
 and, when it returns 0, shuts down cleanly with no message (`ExitProcess(0)`
@@ -204,7 +204,27 @@ so nothing is there.
 `tools/register_key.ps1` runs that same `GetPidx` call once, from a 32-bit
 elevated process (the DLL is 32-bit, and HKLM needs admin), so the player types
 the key from their own disc case into Microsoft's dialog. Nothing is patched or
-bypassed: it is the check the game runs, run once where it can write.
+bypassed: it is the check the game runs, run once where it can write. With
+`-Key` it types the key into that dialog's five boxes (IDs 1006-1010) and
+presses OK from a helper thread, so `Setup.cmd` can ask for the key at its
+prompt. A registered copy has `PID`, `DigitalProductID` and `DoubleHash` under
+`HKLM\SOFTWARE\WOW6432Node\Microsoft\Microsoft Games\Rise of Legends`.
+
+## Where it stops now: a fault after the D3D9 device
+
+Registered, the game creates its window (`CreateWindowExW`, which the headless
+host now hides as it did the ANSI call) and its device, then faults in lifted
+code:
+
+```
+[headless] CreateWindowExW("Rise of Legends", 1024x768) from sub_00D1B150 -> hidden hwnd 005017A4
+[headless] CreateDevice adapter 0 type 1 flags 0x42: 1024x768 fmt 22 x1 ms 0 swap 1 depth 1/75 interval 0x0 FULLSCREEN -> windowed
+[headless] CreateDevice -> 0x00000000
+
+=== fault 0xC0000005 at 0x5205672C, thread 39888 ===
+  read of 0x44B60F38
+  in lifted sub_00F205A0, last native call (native)
+```
 
 ## The full build, and why it stopped
 

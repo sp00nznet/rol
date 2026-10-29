@@ -42,8 +42,8 @@ MILESTONES = [
     ('entry point entered', r'entering 0x01066ED2'),
     # Past the CRT, the heap and the x87 dispatch, into the game's own start-up:
     # its first message box or window, whichever comes first.
-    ('game code reaches its first dialog or window', r'\[messagebox\]|\[headless\] CreateWindowExA\('),
-    ('window created', r'\[headless\] CreateWindowExA\('),
+    ('game code reaches its first dialog or window', r'\[messagebox\]|\[headless\] CreateWindowExW?\('),
+    ('window created', r'\[headless\] CreateWindowExW?\('),
     ('D3D9 device created', r'\[headless\] CreateDevice -> 0x00000000'),
     ('first frame presented', r'\[headless\] frame 1 presented'),
     ('100 frames presented', r'\[headless\] frame 100 presented'),

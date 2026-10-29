@@ -5,8 +5,12 @@ All notable changes to this project. Format: [Keep a Changelog](https://keepacha
 ## [Unreleased]
 
 ### Added
-- `tools/register_key.ps1`: registers the player's own CD key through the
-  game's `mgspid.dll!GetPidx` dialog. The game quits silently without it.
+- `tools/register_key.ps1 [-Key ...]`: registers the player's own CD key
+  through the game's `mgspid.dll!GetPidx` dialog, typing it in when given.
+  The game quits silently without it. `Setup.cmd` step 4 asks for the EULA
+  and the key (`-Key`, `-AcceptEula` to answer in advance).
+- Host: `CreateWindowExW` is hidden in `--headless` too; the game's window
+  used to appear on the desktop. Conformance 6/8 (window, D3D9 device).
 - `run_lift.py`: entries whose code a lifted body already owns (aliases, and
   starts the walk before them falls into) lift as stubs into that body (needs
   pcrecomp #151). 33.4M lines -> 8.0M, 394 no-terminator bodies -> 5.

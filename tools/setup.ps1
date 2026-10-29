@@ -13,7 +13,7 @@
 # The whole script runs at Idle priority, and so does everything it starts:
 # the catalog and the build take every core they are given, and the machine
 # should stay usable while they do.
-param([switch]$Force, [string]$Discs = "", [string]$Patch = "")
+param([switch]$Force, [string]$Discs = "", [string]$Patch = "", [string]$Key = "", [switch]$AcceptEula)
 
 $ErrorActionPreference = 'Stop'
 $Root = Split-Path -Parent $PSScriptRoot
@@ -30,7 +30,7 @@ Log "==== setup $(Get-Date -Format s)"
 $Mounted = @()
 function Dismount-All { foreach ($i in $script:Mounted) { try { Dismount-DiskImage -ImagePath $i | Out-Null } catch {} } }
 function Say($t, $c = 'Gray') { Write-Host $t -ForegroundColor $c; Log $t }
-function Step($n, $t) { Write-Host ""; Say "[$n/7] $t" 'Cyan' }
+function Step($n, $t) { Write-Host ""; Say "[$n/8] $t" 'Cyan' }
 function Fail($t) {
   Dismount-All
   Say "" ; Say "Setup stopped: $t" 'Red'
@@ -205,25 +205,57 @@ if ((Md5 $Exe) -eq $V25) {
 }
 Say "  legends.exe v2.5, md5 $V25" 'Green'
 
+# ---------------------------------------------------------------- EULA + key
+# The MSI would ask for both; this install skips the MSI (docs/install.md), and
+# the game quits silently without a product ID (docs/host.md).
+Step 4 "Your license: the EULA and your product key"
+$eulaKey = 'HKCU:\Software\Microsoft\Microsoft Games\Rise of Legends'
+$pidKey = 'HKLM:\SOFTWARE\WOW6432Node\Microsoft\Microsoft Games\Rise of Legends'
+$accepted = $false
+try { $accepted = [int](Get-ItemProperty $eulaKey -ErrorAction Stop).FIRSTRUN -ne 0 } catch {}
+if ($accepted) { Say "  EULA already accepted (skipping)." }
+else {
+  Say "  The license agreement is $(Join-Path $Game 'EULA.RTF')."
+  if (-not ($AcceptEula -or (Ask "  Have you read it, and do you accept it?"))) { Fail "the game does not run until its EULA is accepted." }
+  New-Item -Path $eulaKey -Force | Out-Null
+  New-ItemProperty -Path $eulaKey -Name FIRSTRUN -PropertyType DWord -Value 1 -Force | Out-Null
+  Say "  EULA accepted."
+}
+$registered = $false
+try { $registered = [bool](Get-ItemProperty $pidKey -ErrorAction Stop).PID } catch {}
+if ($registered) { Say "  Product key already registered (skipping)." }
+else {
+  while ($Key.Trim() -notmatch '^[0-9A-Za-z]{5}(-[0-9A-Za-z]{5}){4}$') {
+    if ($Key) { Say "  That is not a product key: five groups of five, XXXXX-XXXXX-XXXXX-XXXXX-XXXXX." 'Yellow' }
+    $Key = (Read-Host "  Your product key, from the disc case (XXXXX-XXXXX-XXXXX-XXXXX-XXXXX)").Trim()
+  }
+  Say "  Registering it with the game's own key check (Windows asks for permission once)..."
+  $code = Exec @('powershell', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File',
+                 (Join-Path $Root 'tools\register_key.ps1'), '-Game', $Game, '-Key', $Key.Trim())
+  try { $registered = [bool](Get-ItemProperty $pidKey -ErrorAction Stop).PID } catch {}
+  if (-not $registered) { Fail "the key was not accepted (exit code $code). Check it and run Setup.cmd again, or pass -Key." }
+  Say "  Product key registered." 'Green'
+}
+
 # ---------------------------------------------------------------- analyze
 $W = '_work\relift'
 New-Item -ItemType Directory -Force $W | Out-Null
-Step 4 "Finding the C++ vtables the binary does name (seconds)"
+Step 5 "Finding the C++ vtables the binary does name (seconds)"
 if ((Test-Path "$W\rtti_seeds.json") -and -not $Force) { Say "  Already done (skipping)." }
 else { Run "RTTI" ($pyargs + @("$T\cpp\rtti.py", '_work\game\legends.exe', '-o', "$W\rtti.json", '--seeds', "$W\rtti_seeds.json")) }
 
 # ---------------------------------------------------------------- catalog
-Step 5 "Finding every function (the long one: about an hour, once)"
+Step 6 "Finding every function (the long one: about an hour, once)"
 if ((Test-Path "$W\functions.json") -and -not $Force) { Say "  Already done (skipping)." }
 else { Run "Disassembling" ($pyargs + @('-u', "$T\disasm\disasm32.py", '_work\game\legends.exe', '-o', "$W\functions.json", '--seed-functions', "$W\rtti_seeds.json")) }
 
 # ---------------------------------------------------------------- lift
-Step 6 "Lifting every function to C (about half an hour)"
+Step 7 "Lifting every function to C (about half an hour)"
 if ((Test-Path "$W\lift_stats.json") -and (Test-Path 'src\recomp\gen\recomp_dispatch.c') -and -not $Force) { Say "  Already done (skipping)." }
 else { Run "Lifting" ($pyargs + @('run_lift.py', '--all', '--split', '150')) }
 
 # ---------------------------------------------------------------- build
-Step 7 "Building the host (optional: an hour or more, and most of your memory)"
+Step 8 "Building the host (optional: an hour or more, and most of your memory)"
 if ((Test-Path 'build\rol.exe') -and -not $Force) { Say "  build\rol.exe is already there (skipping)." }
 elseif (Ask "  Build it now? It runs at low priority, but expect a slow machine until it is done.") {
   $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"

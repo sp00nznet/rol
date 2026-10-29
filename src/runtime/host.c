@@ -73,6 +73,21 @@ static void shim_CreateWindowExA(void) {
     g_esp += 4 + 12 * 4;
 }
 
+/* Rise of Legends makes its window with the wide call; without this one a
+ * --headless run put a real window on the desktop. */
+static void shim_CreateWindowExW(void) {
+    HWND h = CreateWindowExW(ARG(0), (LPCWSTR)(uintptr_t)ARG(1), (LPCWSTR)(uintptr_t)ARG(2),
+                             ARG(3) & ~WS_VISIBLE, (int)ARG(4), (int)ARG(5), (int)ARG(6),
+                             (int)ARG(7), (HWND)(uintptr_t)ARG(8), (HMENU)(uintptr_t)ARG(9),
+                             (HINSTANCE)(uintptr_t)ARG(10), (LPVOID)(uintptr_t)ARG(11));
+    fprintf(stderr, "[headless] CreateWindowExW(\"%ls\", %dx%d) from sub_%08X -> hidden hwnd %p\n",
+            ARG(2) ? (const wchar_t*)(uintptr_t)ARG(2) : L"(null)", (int)ARG(6), (int)ARG(7),
+            g_cur_func, (void*)h);
+    g_game_hwnd = h;
+    g_eax = (uint32_t)(uintptr_t)h;
+    g_esp += 4 + 12 * 4;
+}
+
 static void shim_ShowWindow(void) {
     g_eax = 0;                         /* "was hidden", which is true */
     g_esp += 4 + 2 * 4;
@@ -342,6 +357,7 @@ static native32_shim_t g_headless_shims[] = {
     { "MessageBoxA", shim_MessageBoxA },
     { "MessageBoxW", shim_MessageBoxW },
     { "CreateWindowExA", shim_CreateWindowExA },
+    { "CreateWindowExW", shim_CreateWindowExW },
     { "ShowWindow", shim_ShowWindow },
 };
 

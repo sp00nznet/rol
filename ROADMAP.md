@@ -1,8 +1,7 @@
 # Roadmap
 
 ## Next
-- Register a product key (`tools/register_key.ps1`) and follow the boot past it.
-- Fold the EULA and key steps into `Setup.cmd`, asking the player for each.
+- The fault in `sub_00F205A0` after the D3D9 device, then the first frame.
 - Follow the boot to the first window. Add each wall to `docs/host.md`.
 - Land pcrecomp #150, #151, #152, then pin to `main` again.
 - The overlapping walks at `0x008BC530` (one 27 MB chunk).
