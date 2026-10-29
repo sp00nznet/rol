@@ -340,7 +340,26 @@ static void hide_simd(void) {
     g_cpuid_edx_ext &= ~((1u << 31) | (1u << 30) | (1u << 22));   /* 3DNow!, 3DNow!+, MMX+ */
 }
 
+/* Who ended the run, and with what code: a clean ExitProcess after Escape in
+ * the intro looked the same as a crash the game's own filter swallowed. */
+static void shim_ExitProcess(void) {
+    fprintf(stderr, "[exit] ExitProcess(%u) from sub_%08X\n", ARG(0), g_cur_func);
+    fflush(stdout);
+    ExitProcess(ARG(0));
+}
+
+/* The game installs its own unhandled-exception filter, which ended a crashed
+ * run quietly with no report. Keep the host's report; say what was asked. */
+static void shim_SetUnhandledExceptionFilter(void) {
+    fprintf(stderr, "[host] the game's SetUnhandledExceptionFilter(0x%08X) is not installed; "
+                    "the host reports crashes\n", ARG(0));
+    g_eax = 0;
+    g_esp += 4 + 1 * 4;
+}
+
 #define GUEST_SHIMS \
+    { "ExitProcess", shim_ExitProcess }, \
+    { "SetUnhandledExceptionFilter", shim_SetUnhandledExceptionFilter }, \
     { "IsProcessorFeaturePresent", shim_IsProcessorFeaturePresent }, \
     { "GetModuleHandleA", shim_GetModuleHandleA }, \
     { "GetModuleFileNameA", shim_GetModuleFileNameA }, \
@@ -437,10 +456,42 @@ static void crash_emit(const char* fmt, ...) {
     if (n > 0) g_crash_len += n;
 }
 
+/* This host's own image: the lifted C and the runtime. */
+static uintptr_t g_host_lo, g_host_hi;
+
+static int in_host(const void* pc) {
+    if (!g_host_lo) {
+        HMODULE m = GetModuleHandleA(NULL);
+        IMAGE_NT_HEADERS* nt = (IMAGE_NT_HEADERS*)((char*)m + ((IMAGE_DOS_HEADER*)m)->e_lfanew);
+        g_host_lo = (uintptr_t)m;
+        g_host_hi = g_host_lo + nt->OptionalHeader.SizeOfImage;
+    }
+    return (uintptr_t)pc >= g_host_lo && (uintptr_t)pc < g_host_hi;
+}
+
+static LONG crash_report(EXCEPTION_POINTERS* ep);
+
+/* A vectored handler runs before any SEH frame. Lifted code has none, so a
+ * fault in this image is fatal and reported here, first-chance. A fault in a
+ * native DLL may be one the DLL handles itself: dxdiagn.dll, asked for system
+ * information through IDxDiagContainer, faulted inside itself on start-up, and
+ * reporting that first-chance killed the game. Those reach the report only if
+ * nobody handles them (crash_unhandled). */
 static LONG CALLBACK crash(EXCEPTION_POINTERS* ep) {
-    static volatile LONG once;
     EXCEPTION_RECORD* r = ep->ExceptionRecord;
     if ((r->ExceptionCode & 0xF0000000u) != 0xC0000000u) return EXCEPTION_CONTINUE_SEARCH;
+    if (r->ExceptionCode != EXCEPTION_STACK_OVERFLOW && !in_host(r->ExceptionAddress))
+        return EXCEPTION_CONTINUE_SEARCH;
+    return crash_report(ep);
+}
+
+static LONG WINAPI crash_unhandled(EXCEPTION_POINTERS* ep) {
+    return crash_report(ep);
+}
+
+static LONG crash_report(EXCEPTION_POINTERS* ep) {
+    static volatile LONG once;
+    EXCEPTION_RECORD* r = ep->ExceptionRecord;
     if (InterlockedExchange(&once, 1)) TerminateProcess(GetCurrentProcess(), 3);
     if (r->ExceptionCode == EXCEPTION_STACK_OVERFLOW) {
         static const char msg[] = "\n=== fault 0xC00000FD: host stack overflow in lifted code ===\n";
@@ -455,7 +506,8 @@ static LONG CALLBACK crash(EXCEPTION_POINTERS* ep) {
         crash_emit("  %s of 0x%08X%s\n", op == 0 ? "read" : op == 1 ? "write" : "execute", at,
                    native32_in_guest(at) ? " (inside the guest image)" : at < 0x10000 ? " (null/low)" : "");
     }
-    crash_emit("  in lifted sub_%08X, last native call %s\n", g_cur_func, g_cur_import);
+    crash_emit("  in %s, from lifted sub_%08X, last native call %s\n",
+               in_host(r->ExceptionAddress) ? "lifted code" : "a native module", g_cur_func, g_cur_import);
     crash_emit("  eax=%08X ecx=%08X edx=%08X ebx=%08X esp=%08X ebp=%08X esi=%08X edi=%08X\n",
                g_eax, g_ecx, g_edx, g_ebx, g_esp, g_ebp, g_esi, g_edi);
     crash_emit("last indirect calls (newest first):\n");
@@ -591,6 +643,7 @@ int main(int argc, char** argv) {
     native32_init();
     hide_simd();
     AddVectoredExceptionHandler(0, crash);
+    SetUnhandledExceptionFilter(crash_unhandled);
     printf("Rise of Legends recomp host\n  lifted functions in dispatch: %u\n", recomp_dispatch_count);
 
     if (!GetEnvironmentVariableA(ROL_CHILD_ENV, NULL, 0)) {

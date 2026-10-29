@@ -210,21 +210,52 @@ presses OK from a helper thread, so `Setup.cmd` can ask for the key at its
 prompt. A registered copy has `PID`, `DigitalProductID` and `DoubleHash` under
 `HKLM\SOFTWARE\WOW6432Node\Microsoft\Microsoft Games\Rise of Legends`.
 
-## Where it stops now: a fault after the D3D9 device
+## The fault after the D3D9 device was not ours
 
-Registered, the game creates its window (`CreateWindowExW`, which the headless
-host now hides as it did the ANSI call) and its device, then faults in lifted
-code:
+Registered, the game creates its window and device, then appeared to fault:
 
 ```
-[headless] CreateWindowExW("Rise of Legends", 1024x768) from sub_00D1B150 -> hidden hwnd 005017A4
-[headless] CreateDevice adapter 0 type 1 flags 0x42: 1024x768 fmt 22 x1 ms 0 swap 1 depth 1/75 interval 0x0 FULLSCREEN -> windowed
-[headless] CreateDevice -> 0x00000000
-
 === fault 0xC0000005 at 0x5205672C, thread 39888 ===
   read of 0x44B60F38
   in lifted sub_00F205A0, last native call (native)
 ```
+
+`0x5205672C` is inside `dxdiagn.dll`, which the game asks for system
+information through `IDxDiagContainer`. The DLL faults inside itself on start-up
+and handles that with its own SEH frame. The host's vectored handler runs
+before any SEH frame, so it reported the first-chance fault and killed a game
+that was fine. The handler now reports first-chance only for faults in the
+host's own image (lifted code has no SEH frames); a fault in a native module
+reaches the report only if nobody handles it (`SetUnhandledExceptionFilter`).
+The game's own unhandled-exception filter is not installed, so a crash is still
+reported rather than ended quietly, and `ExitProcess` is logged with its caller.
+
+With that, the game plays its intro, asks for a name and the CEIP choice, and
+reaches the main menu with its animated backdrop
+([screenshots](screenshots/)).
+
+## Quick Battle: a vtable method the catalog decoded over
+
+Clicking Quick Battle loops on
+
+```
+ICALL: unresolved VA 0x00C805E0 from 0x00FB84D0
+```
+
+`0x00C805E0` is a method reached only through a vtable. The 52 bytes before it
+are a switch jump table; the catalog read the table as code from a false start
+(`sub_00C805B1`, a run of `enter` instructions), and that decode runs across
+`0x00C805E0` without an instruction starting there, so the vtable scan took the
+slot for the inside of a known function. IDA lists five such methods in this
+binary, all the same shape (`0x00780064`, `0x00B90C90`, `0x00C805E0`,
+`0x00CC3AC0`, `0x00FE0B10`).
+
+`run_lift.py` now adds a data pointer as an entry when its neighbouring dword
+names a known function and no lifted body has an instruction starting at it.
+That takes 897 addresses (all five, plus junk that is never called) and appends
+them after the other chunks, so only the tail of the lift changes. The fix
+belongs upstream in disasm32: a pointer-run target that is not an instruction
+boundary of its "owner" means the owner's decode is misaligned.
 
 ## The full build, and why it stopped
 

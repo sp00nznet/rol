@@ -14,7 +14,7 @@ tools get wrong goes back upstream. This repo follows pcrecomp's shared house
 style (layout, CLI, harness, headless mode), next to
 [The Movies](https://github.com/sp00nznet/themovies), its closest sibling.
 
-## Status: **v0.1.0-dev, alpha (bring-up). The whole game lifts, builds and runs its own start-up, to its own error box; nothing renders yet.**
+## Status: **v0.1.0-dev, alpha (bring-up). The whole game lifts, builds and boots to its main menu: intro, first-run dialogs and menu render; no match yet.**
 
 | Stage | State |
 |---|---|
@@ -28,8 +28,8 @@ style (layout, CLI, harness, headless mode), next to
 | Headless mode | `--headless --record out.mp4 --frames N` (from The Movies' host) |
 | Conformance harness | `tools/conformance.py`: **6/8 boot milestones** (mapped, bound, entered, its window, a D3D9 device), 0 lift errors, against `conformance.json` |
 
-Where it stops: a fault in lifted code right after the D3D9 device is created
-([host.md](docs/host.md#where-it-stops-now-a-fault-after-the-d3d9-device)).
+Where it stops: Quick Battle calls a method the catalog decoded over
+([host.md](docs/host.md#quick-battle-a-vtable-method-the-catalog-decoded-over)).
 
 Built on pcrecomp `main` (a85ea97) plus three open pull requests this game
 turned up: **#150** (`cmpxchg8b` was a no-op: the heap's lock spun forever),
@@ -39,8 +39,12 @@ Until they merge, build against a pcrecomp with all three merged in.
 
 ## Screenshots
 
-None yet: the game does not reach its first window. Screenshots go in
-`docs/screenshots/` when it does.
+Recorded headless (`--record`) from the recompiled build.
+
+| | |
+|---|---|
+| ![Intro](docs/screenshots/intro.png) | ![Enter your name](docs/screenshots/enter-your-name.png) |
+| ![CEIP](docs/screenshots/ceip.png) | ![Main menu](docs/screenshots/main-menu.png) |
 
 ## Getting Started
 

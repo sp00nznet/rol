@@ -187,8 +187,28 @@ def main():
     for addr in sorted(chosen):
         if host(addr) is not None:
             inside[host(addr)].append(addr)
+    # A vtable slot can name a method the catalog decoded over: a jump table
+    # right before it read as code from a false start, and that decode runs
+    # across the real start without stopping on it (0x00C805E0, reached only
+    # from 0x00FB84D0's virtual call; five such in this binary, IDA agrees on
+    # all five). The tell: no lifted body has an instruction starting there.
+    # A vtable slot sits next to another slot naming a known function.
+    # ponytail: neighbour test, not a full pointer-run scan. Upstream fix
+    # belongs in disasm32.
+    raw = open(args.exe, 'rb').read()
+    over = set()
+    for s in info.sections:
+        if s.name == '.text':
+            continue
+        b = raw[s.raw_offset:s.raw_offset + s.raw_size]
+        w = [int.from_bytes(b[o:o + 4], 'little') for o in range(0, len(b) - 3, 4)]
+        for i, v in enumerate(w):
+            if (cs <= v < ce and v not in byaddr and v not in owner and code[v - cs] not in (0xCC, 0x00)
+                    and ((i and w[i - 1] in byaddr) or (i + 1 < len(w) and w[i + 1] in byaddr))):
+                over.add(v)
+    print('[*] data pointers to code no body starts an instruction at: %d' % len(over))
     stubbed = 0
-    todo, added, outside = sorted(chosen), 0, set()
+    todo, added, outside = sorted(chosen), 0, set(over)
     while todo:
         for addr in todo:
             name = 'sub_%08X' % addr
