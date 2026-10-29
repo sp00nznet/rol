@@ -28,8 +28,9 @@ style (layout, CLI, harness, headless mode), next to
 | Headless mode | `--headless --record out.mp4 --frames N` (from The Movies' host) |
 | Conformance harness | `tools/conformance.py`: **4/8 boot milestones** (mapped, bound, entered, the game's own first dialog), 0 lift errors, against `conformance.json` |
 
-Where it stops: Microsoft's EULA dialog, which a headless run cannot click
-([host.md](docs/host.md#where-it-stops-now-the-eula-dialog)).
+Where it stops: the product-key check. The game wants the product ID the
+installer writes from your CD key; `tools/register_key.ps1` registers your own
+key with the game's own dialog ([host.md](docs/host.md#where-it-stops-now-the-product-key)).
 
 Built on pcrecomp `main` (a85ea97) plus three open pull requests this game
 turned up: **#150** (`cmpxchg8b` was a no-op: the heap's lock spun forever),

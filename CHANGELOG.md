@@ -5,6 +5,8 @@ All notable changes to this project. Format: [Keep a Changelog](https://keepacha
 ## [Unreleased]
 
 ### Added
+- `tools/register_key.ps1`: registers the player's own CD key through the
+  game's `mgspid.dll!GetPidx` dialog. The game quits silently without it.
 - `run_lift.py`: entries whose code a lifted body already owns (aliases, and
   starts the walk before them falls into) lift as stubs into that body (needs
   pcrecomp #151). 33.4M lines -> 8.0M, 394 no-terminator bodies -> 5.

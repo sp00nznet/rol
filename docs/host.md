@@ -174,7 +174,7 @@ from its own path, got the host's, and every `.\BIGS\` lookup was
 `host.c` now answers `GetModuleFileNameW`, `GetModuleHandleW` and
 `GetCommandLineW` with the guest's `legends.exe` too.
 
-## Where it stops now: the EULA dialog
+## The EULA dialog
 
 With its files found, the game reads 48 of them and then calls
 `eula.dll!EBUEula` (Microsoft's EULA dialog) with
@@ -183,7 +183,28 @@ the dialog is a hidden window nobody can click, so the run waits there.
 
 `EBUEula` reads `HKCU\Software\Microsoft\Microsoft Games\Rise of Legends\FIRSTRUN`
 (a DWORD) and skips the dialog when it is non-zero; clicking **Accept** writes
-it. A normal install has it set after the first launch.
+it. Accepting the EULA is the player's call: read `_work\game\EULA.RTF`, then
+either run the game once with a window and click Accept, or set the value
+yourself:
+
+```
+reg add "HKCU\Software\Microsoft\Microsoft Games\Rise of Legends" /v FIRSTRUN /t REG_DWORD /d 1 /f
+```
+
+## Where it stops now: the product key
+
+Past the EULA, the game calls `mgspid.dll!GetPidx(HKLM, "SOFTWARE\Microsoft\Microsoft Games\Rise of Legends", "Rise of Legends", buf)`
+and, when it returns 0, shuts down cleanly with no message (`ExitProcess(0)`
+from `0x00B09FBE`'s caller). `GetPidx` reads an existing product ID; without
+one it shows its own CD-key dialog (resource `0x6B`), checks the key with
+`pidgen.dll!PIDGenSimpA`, and writes `PID` and `DigitalProductID` under HKLM.
+The MSI normally does this at install time; `tools/setup.ps1` skips the MSI,
+so nothing is there.
+
+`tools/register_key.ps1` runs that same `GetPidx` call once, from a 32-bit
+elevated process (the DLL is 32-bit, and HKLM needs admin), so the player types
+the key from their own disc case into Microsoft's dialog. Nothing is patched or
+bypassed: it is the check the game runs, run once where it can write.
 
 ## The full build, and why it stopped
 
