@@ -30,8 +30,9 @@ style (layout, CLI, harness, headless mode), next to
 
 Where it is: menus, Quick Battle (map, HUD, economy ticking, AI opponent) and
 the campaign (cinematic, briefing, mission 1 with its tutorial) all run
-recompiled. Driven so far only by scripted left clicks; right-click orders and a
-whole match played to the end are next
+recompiled. Scripted clicks, right-click orders and box selection all work: in
+mission 1 the army marches to each quest marker and "Head to the Mine"
+completes. A whole mission played to its end is next
 ([host.md](docs/host.md#in-game)).
 
 Built on pcrecomp `main` (a85ea97) plus three open pull requests this game

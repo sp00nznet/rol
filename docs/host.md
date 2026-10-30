@@ -289,6 +289,14 @@ Campaign (170,277) -> Vinci panel (240,400) -> New Campaign (511,340) -> Click
 To Begin Battle (512,664), and Quick Battle (170,327) -> Start Game (862,640)
 -> Close tips (786,577).
 
+`--rclick x,y@s` and `--drag x1,y1,x2,y2@s` give orders and box selection. In
+mission 1: `--drag 400,270,790,540@325` selects the army, `--rclick 137,618@335`
+and `--rclick 160,661@440` march it over the minimap to the bridge, and "Head to
+the Mine" completes ("Avenge Petruzzo!" follows). Script times count recorded
+frames (30 per "second"), not wall-clock time, so a script replays the same way
+on a loaded machine; every run still starts from boot, about 10 minutes of
+frames before mission 1's first order.
+
 ## The full build, and why it stopped
 
 At 12 parallel jobs, `cl` died on 14 of the 30-50 MB chunks with no diagnostic
