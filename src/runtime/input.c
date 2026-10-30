@@ -1,5 +1,6 @@
 /*
- * Scripted input for headless runs: --click x,y@s and --key vk@s.
+ * Scripted input for headless runs: --click x,y@s, --rclick x,y@s (orders),
+ * --drag x1,y1,x2,y2@s (box select, left button) and --key vk@s.
  *
  * The game's window is hidden (host.c, --headless), so nothing real can
  * reach it, and over RDP the real cursor must not: the phone's pointer would
@@ -31,9 +32,13 @@ extern volatile LONG g_frames;                 /* host.c: frames presented */
 #define SCRIPT_FPS 30                          /* host.c records at 30 fps */
 
 #define ARG(n) MEM32(g_esp + 4 + 4 * (n))
-#define MAX_EVENTS 64
+#define MAX_EVENTS 512
 
-typedef struct { int key; int x, y; double at; } event_t;   /* key 0 = click, -1 = move */
+typedef struct { int key; int x, y, x2, y2; double at; } event_t;
+#define EV_CLICK 0
+#define EV_MOVE (-1)
+#define EV_RCLICK (-2)
+#define EV_DRAG (-3)
 static event_t g_events[MAX_EVENTS];
 static int g_nevents;
 /* Where the script wants the cursor, in client pixels. Windows messages and
@@ -46,12 +51,21 @@ static volatile LONG g_held[256];              /* scripted keys/buttons down */
 int input_arg(int argc, char** argv, int i) {
     const char* at;
     if (i + 1 >= argc || g_nevents == MAX_EVENTS) return 0;
-    if (!strcmp(argv[i], "--click") || !strcmp(argv[i], "--move")) {
+    if (!strcmp(argv[i], "--click") || !strcmp(argv[i], "--move") || !strcmp(argv[i], "--rclick")) {
         event_t* e = &g_events[g_nevents];
         if (sscanf(argv[i + 1], "%d,%d", &e->x, &e->y) != 2) return 0;
         at = strchr(argv[i + 1], '@');
         e->at = at ? atof(at + 1) : 0;
-        e->key = argv[i][2] == 'm' ? -1 : 0;
+        e->key = argv[i][2] == 'm' ? EV_MOVE : argv[i][2] == 'r' ? EV_RCLICK : EV_CLICK;
+        g_nevents++;
+        return 2;
+    }
+    if (!strcmp(argv[i], "--drag")) {
+        event_t* e = &g_events[g_nevents];
+        if (sscanf(argv[i + 1], "%d,%d,%d,%d", &e->x, &e->y, &e->x2, &e->y2) != 4) return 0;
+        at = strchr(argv[i + 1], '@');
+        e->at = at ? atof(at + 1) : 0;
+        e->key = EV_DRAG;
         g_nevents++;
         return 2;
     }
@@ -68,6 +82,23 @@ int input_arg(int argc, char** argv, int i) {
 
 static LPARAM client_lparam(void) { return MAKELPARAM(g_oscursor.x, g_oscursor.y); }
 
+/* Move the cursor, and give the game's per-frame DirectInput steering time to
+ * get it there before anything is pressed. */
+static void move_to(int x, int y, DWORD settle) {
+    g_oscursor.x = x;
+    g_oscursor.y = y;
+    g_steer = 1;
+    Sleep(settle);
+    PostMessageA(g_game_hwnd, WM_MOUSEMOVE, 0, client_lparam());
+}
+
+static void button(int vk, int down) {
+    UINT msg = vk == VK_LBUTTON ? (down ? WM_LBUTTONDOWN : WM_LBUTTONUP)
+                                : (down ? WM_RBUTTONDOWN : WM_RBUTTONUP);
+    g_held[vk] = down;
+    PostMessageA(g_game_hwnd, msg, down ? (vk == VK_LBUTTON ? MK_LBUTTON : MK_RBUTTON) : 0, client_lparam());
+}
+
 static DWORD WINAPI script(LPVOID unused) {
     (void)unused;
     /* No WM_ACTIVATE/WM_ACTIVATEAPP: the game believes it is fullscreen, and
@@ -78,25 +109,26 @@ static DWORD WINAPI script(LPVOID unused) {
     for (int i = 0; i < g_nevents; i++) {
         event_t* e = &g_events[i];
         while (g_frames < (LONG)(e->at * SCRIPT_FPS)) Sleep(2);
-        if (e->key == -1) {
-            g_oscursor.x = e->x;
-            g_oscursor.y = e->y;
-            g_steer = 1;
-            PostMessageA(g_game_hwnd, WM_MOUSEMOVE, 0, client_lparam());
+        if (e->key == EV_MOVE) {
+            move_to(e->x, e->y, 0);
             fprintf(stderr, "[input] %.1fs move %d,%d\n", e->at, e->x, e->y);
-        } else if (e->key == 0) {
-            g_oscursor.x = e->x;
-            g_oscursor.y = e->y;
-            g_steer = 1;
-            Sleep(250);                        /* let the motion land first */
-            PostMessageA(g_game_hwnd, WM_MOUSEMOVE, 0, client_lparam());
+        } else if (e->key == EV_CLICK || e->key == EV_RCLICK) {
+            int vk = e->key == EV_CLICK ? VK_LBUTTON : VK_RBUTTON;
+            move_to(e->x, e->y, 250);          /* let the motion land first */
             Sleep(60);
-            g_held[VK_LBUTTON] = 1;
-            PostMessageA(g_game_hwnd, WM_LBUTTONDOWN, MK_LBUTTON, client_lparam());
+            button(vk, 1);
             Sleep(90);
-            g_held[VK_LBUTTON] = 0;
-            PostMessageA(g_game_hwnd, WM_LBUTTONUP, 0, client_lparam());
-            fprintf(stderr, "[input] %.1fs click %d,%d\n", e->at, e->x, e->y);
+            button(vk, 0);
+            fprintf(stderr, "[input] %.1fs %s %d,%d\n", e->at, vk == VK_LBUTTON ? "click" : "rclick", e->x, e->y);
+        } else if (e->key == EV_DRAG) {
+            move_to(e->x, e->y, 250);
+            Sleep(60);
+            button(VK_LBUTTON, 1);
+            for (int k = 1; k <= 8; k++)       /* a few frames of motion, so it reads as a drag */
+                move_to(e->x + (e->x2 - e->x) * k / 8, e->y + (e->y2 - e->y) * k / 8, 60);
+            Sleep(120);
+            button(VK_LBUTTON, 0);
+            fprintf(stderr, "[input] %.1fs drag %d,%d -> %d,%d\n", e->at, e->x, e->y, e->x2, e->y2);
         } else {
             UINT sc = MapVirtualKeyA(e->key, MAPVK_VK_TO_VSC);
             g_held[e->key & 0xFF] = 1;
@@ -132,7 +164,7 @@ void input_start(void) {
 
 static void* g_mouse_dev;
 static void* g_kbd_dev;
-static int g_told_btn;
+static int g_told_btn, g_told_rbtn;
 static unsigned char g_told_keys[256];
 static DWORD g_seq;
 static volatile LONG g_n_state[2], g_n_data[2];   /* [mouse, keyboard] reads */
@@ -227,7 +259,9 @@ static HRESULT WINAPI hl_data(void* self, DWORD cb, LPDIDEVICEOBJECTDATA out, LP
         mouse_step(&dx, &dy);
         if (dx) EMIT(DIMOFS_X, dx);
         if (dy) EMIT(DIMOFS_Y, dy);
+        int rbtn = g_held[VK_RBUTTON] != 0;
         if (btn != g_told_btn) { EMIT(DIMOFS_BUTTON0, btn ? 0x80 : 0); g_told_btn = btn; }
+        if (rbtn != g_told_rbtn) { EMIT(DIMOFS_BUTTON1, rbtn ? 0x80 : 0); g_told_rbtn = rbtn; }
     } else if (self == g_kbd_dev) {
         for (int vk = 1; vk < 256; vk++) {
             unsigned sc = MapVirtualKeyA(vk, MAPVK_VK_TO_VSC) & 0xFF;
