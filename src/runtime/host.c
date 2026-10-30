@@ -357,8 +357,18 @@ static void shim_SetUnhandledExceptionFilter(void) {
     g_esp += 4 + 1 * 4;
 }
 
+/* The game refuses to start in a remote session ("can not be run in a remote
+ * desktop"), and this is driven over RDP. Headless or not, the host draws
+ * nothing to the session, so answer as a local console. */
+static void shim_GetSystemMetrics(void) {
+    int i = (int)ARG(0);
+    g_eax = i == SM_REMOTESESSION ? 0 : (uint32_t)GetSystemMetrics(i);
+    g_esp += 4 + 1 * 4;
+}
+
 #define GUEST_SHIMS \
     { "ExitProcess", shim_ExitProcess }, \
+    { "GetSystemMetrics", shim_GetSystemMetrics }, \
     { "SetUnhandledExceptionFilter", shim_SetUnhandledExceptionFilter }, \
     { "IsProcessorFeaturePresent", shim_IsProcessorFeaturePresent }, \
     { "GetModuleHandleA", shim_GetModuleHandleA }, \
