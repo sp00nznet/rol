@@ -14,7 +14,7 @@ tools get wrong goes back upstream. This repo follows pcrecomp's shared house
 style (layout, CLI, harness, headless mode), next to
 [The Movies](https://github.com/sp00nznet/themovies), its closest sibling.
 
-## Status: **v0.1.0-dev, alpha (bring-up). In game: a Quick Battle skirmish plays, and the Vinci campaign runs its opening cinematic into mission 1.**
+## Status: **v0.1.0-alpha.1. In game: Quick Battle skirmishes play and the Vinci campaign runs into its first mission, with an F10 menu of enhancements (4K, antialiasing, farther zoom, sharpening, stats, photo mode).**
 
 | Stage | State |
 |---|---|
@@ -35,11 +35,12 @@ mission 1 the army marches to each quest marker and "Head to the Mine"
 completes. A whole mission played to its end is next
 ([host.md](docs/host.md#in-game)).
 
-Built on pcrecomp `main` (a85ea97) plus three open pull requests this game
-turned up: **#150** (`cmpxchg8b` was a no-op: the heap's lock spun forever),
-**#151** (alias entries enter their parent instead of copying it: 75% of the C
-was copies), **#152** (a jump-table target on a label inside another handler).
-Until they merge, build against a pcrecomp with all three merged in.
+Built on pcrecomp: this game turned up **#150** (`cmpxchg8b` was a no-op: the
+heap's lock spun forever), **#151** (alias entries enter their parent instead
+of copying it: 75% of the C was copies) and **#152** (a jump-table target on a
+label inside another handler), all merged, and **#155** (a loop split by a
+chain of false entries ran as nested calls: Start Game overflowed the stack),
+open. The installer pins pcrecomp at #155's commit.
 
 ## Screenshots
 
@@ -52,6 +53,43 @@ Recorded headless (`--record`) from the recompiled build.
 | ![Quick Battle](docs/screenshots/quick-battle.png) | ![Skirmish](docs/screenshots/skirmish.png) |
 | ![Campaign intro](docs/screenshots/campaign-intro.png) | ![Mission 1 briefing](docs/screenshots/campaign-briefing.png) |
 | ![Mission 1](docs/screenshots/campaign-mission1.png) | |
+
+## Enhancements
+
+**F10** in the game opens a menu of things the 2006 game could not do, or did
+but never offered. All of it is in the host; the install is never changed.
+[docs/enhancements.md](docs/enhancements.md) has how each one works.
+
+| | |
+|---|---|
+| **4K and widescreen** | a borderless fullscreen window at any resolution; on a 4K screen the game renders at 1080p and is scaled 2x, because its interface is a fixed pixel size and would be tiny |
+| **Antialiasing** | 4x MSAA, which the engine supports but the options screen never offered |
+| **Shadows** | 4096 or 8192 shadow maps, past the 2048 the 2006 hardware probe allowed |
+| **Texture filtering** | 16x anisotropic; the game never set it, and the ground at an RTS camera angle is where it shows |
+| **Sharpening, vivid colour** | a post-process over the finished frame (AMD CAS's edge-aware sharpening) |
+| **Zoom out farther** | 1.5x or 2x the original range, with the fog pushed back to match |
+| **Stats** | frame rate and clock, plus the game's own clock, score, health bars and gather rates |
+| **Photo mode** | hide the interface; **F9** saves a PNG to Pictures\Rise of Legends |
+
+| Zoomed out 2x | 4x antialiasing, 8192 shadows, 16x filtering |
+|---|---|
+| ![Zoomed out 2x](docs/screenshots/enhanced-zoom.png) | ![Antialiasing and shadows](docs/screenshots/enhanced-msaa.png) |
+
+![The F10 menu](docs/screenshots/f10-menu.png)
+
+## Install
+
+Download **RoL-Recomp-Installer** (Windows) from the
+[latest release](https://github.com/sp00nznet/rol/releases/latest), run it and
+point it at the folder holding your four disc images (`.iso`) and
+`RoL_Patch2.5.exe`. Pressing **Build** accepts the game's EULA; Microsoft's own
+dialog then asks for the product key from your disc case. It downloads this
+repository and the pcrecomp toolkit as source, installs what is missing
+(Python, innoextract, the Visual Studio Build Tools) and runs `Setup.cmd` for
+you: expect two to four hours, about 25 GB of disk and 16 GB of memory. Then
+**Play**. Nothing from the game is downloaded or bundled; the build is made
+from your discs and stays on your machine. Windows SmartScreen asks once about
+the unsigned installer (**More info**, **Run anyway**).
 
 ## Getting Started
 
@@ -77,7 +115,8 @@ build, which takes an hour or more and most of your memory. A rerun skips the
 finished steps. If it stops, it says why in one sentence, and the details are
 in `setup.log`. Everything runs at low priority.
 
-There is nothing to play yet, so it makes no shortcut.
+After the build it makes the F10 menu's zoom archives (`build\rol_data`) and
+leaves **`Rise of Legends (recomp).cmd`**, which plays.
 
 ### Step by step
 
@@ -90,6 +129,13 @@ repository as `pcrecomp-rol`:
 some-folder\
   pcrecomp-rol\   <- git clone https://github.com/sp00nznet/pcrecomp pcrecomp-rol
   rol\            <- this repository
+```
+
+and checked out at the commit the installer uses (it has #155, which a match
+needs; `launcher/launcher.json` names it):
+
+```
+git -C pcrecomp-rol checkout 50d854c11b2cce5501856b140439b3d7143629d6
 ```
 
 Why each install step is the way it is: [docs/install.md](docs/install.md).

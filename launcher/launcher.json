@@ -1,0 +1,18 @@
+{
+  "title": "Rise of Nations: Rise of Legends",
+  "repo": "sp00nznet/rol",
+  "accent": "#c9a227",
+  "note": {
+    "windows": "Point it at the folder holding your four Rise of Legends disc images (.iso) and RoL_Patch2.5.exe. Pressing Build accepts the game's EULA; Microsoft's own dialog then asks for the product key from your disc case. The first build takes two to four hours, about 25 GB of disk and 16 GB of memory (8 GB works, slowly). Python, innoextract and the Visual Studio Build Tools (about 3 GB) are installed if they are missing; Windows asks for permission.",
+    "default": "Rise of Legends builds on Windows only: the recompiled game runs on the game's own 32-bit Windows DLLs and Direct3D 9. Use the Windows installer."
+  },
+  "game": {
+    "name": "Rise of Legends discs",
+    "files": ["*.iso", "RoL_Patch2.5.exe"]
+  },
+  "sources": [{ "repo": "sp00nznet/pcrecomp", "ref": "50d854c11b2cce5501856b140439b3d7143629d6", "dir": "pcrecomp-rol" }],
+  "setup": {
+    "windows": ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "tools\\setup.ps1", "-Yes", "-Game", "{game}"]
+  },
+  "play": "* (recomp).cmd"
+}

@@ -4,7 +4,45 @@ All notable changes to this project. Format: [Keep a Changelog](https://keepacha
 
 ## [Unreleased]
 
+## [0.1.0-alpha.1] - 2026-10-30
+
+The first playable build: Quick Battle skirmishes and the Vinci campaign's
+first mission run recompiled, with an F10 menu of enhancements, and an
+installer that builds it from your own discs.
+
 ### Added
+- **Enhancements and the F10 menu** (`src/runtime/enhance.c`,
+  `docs/enhancements.md`): borderless fullscreen at any resolution with a
+  render scale (1080p scaled 2x on a 4K screen, where the fixed-size interface
+  would be tiny); 4x MSAA and 4096/8192 shadow maps, both the engine's own and
+  never offered by its options screen; 16x anisotropic filtering; CAS
+  sharpening and vivid colour as a post-process; zoom out 1.5x or 2x with the
+  fog pushed back (`tools/make_enhanced_data.py` rewrites the camera and
+  tileset archives into `rol_data\`); a frame-rate overlay and the game's own
+  clock, score, health bars and gather rates; photo mode (hide the interface,
+  F9 PNG screenshots). Settings in `rol.ini`.
+- `tools/bigtool.py`: lists, extracts and rewrites the game's `.big` archives
+  and their binary XML.
+- **Installer**: `launcher/launcher.json` and `.github/workflows/installer.yml`
+  for recomp-launcher; `tools/setup.ps1 -Yes -Game <folder>` runs unattended,
+  builds, makes the zoom data and writes `Rise of Legends (recomp).cmd`.
+- In game: Quick Battle loads and plays (the economy ticks, the AI plays); the
+  campaign runs its cinematic and briefing into mission 1, whose first quest
+  completes under scripted orders.
+- Scripted input: `--rclick`, `--drag`, `--wheel`; extended keys (Page Up, the
+  arrows) reach DirectInput and the window as themselves, not the keypad.
+- Host: answers `GetSystemMetrics(SM_REMOTESESSION)` as local (the game
+  refuses remote sessions); reports first-chance faults only in its own image
+  (dxdiagn.dll's own handled fault had killed the game); records antialiased
+  frames through a resolve.
+- `run_lift.py`: data pointers to methods the catalog decoded over (a jump
+  table before them read as code) become entries; Quick Battle called one.
+
+### Fixed
+- Start Game overflowed the host stack: a loop split by a chain of false
+  entries ran as one nested call per iteration (pcrecomp #155).
+
+### Added during bring-up
 - `tools/register_key.ps1 [-Key ...]`: registers the player's own CD key
   through the game's `mgspid.dll!GetPidx` dialog, typing it in when given.
   The game quits silently without it. `Setup.cmd` step 4 asks for the EULA

@@ -21,6 +21,7 @@
 #include "native32.h"
 #include "recomp_trace.h"
 #include "input.h"
+#include "enhance.h"
 
 extern const uint32_t rol_entry_va;     /* recomp_dispatch.c */
 
@@ -148,13 +149,15 @@ static void record_frame(IDirect3DDevice9* dev) {
         g_ffmpeg = _popen(cmd, "wb");
         fprintf(stderr, "[record] %ux%u format %d -> %s\n", d.Width, d.Height, d.Format, g_record);
     }
-    if (g_ffmpeg && SUCCEEDED(dev->lpVtbl->GetRenderTargetData(dev, bb, g_readback)) &&
+    IDirect3DSurface9* src = enhance_readable(dev, bb);    /* antialiasing: a resolved copy */
+    if (g_ffmpeg && src && SUCCEEDED(dev->lpVtbl->GetRenderTargetData(dev, src, g_readback)) &&
         SUCCEEDED(g_readback->lpVtbl->LockRect(g_readback, &lr, NULL, D3DLOCK_READONLY))) {
         for (UINT y = 0; y < d.Height; y++)
             fwrite((const char*)lr.pBits + y * lr.Pitch, 4, d.Width, g_ffmpeg);
         g_readback->lpVtbl->UnlockRect(g_readback);
         g_recorded++;
     }
+    if (src) src->lpVtbl->Release(src);
     bb->lpVtbl->Release(bb);
     if (g_record_frames && g_recorded >= g_record_frames) {
         record_close();
@@ -168,6 +171,7 @@ static HRESULT WINAPI hl_Present(void* self, const RECT* src, const RECT* dst, H
     LONG n = InterlockedIncrement(&g_frames);
     if (n == 1 || n == 10 || n == 100 || n % 1000 == 0)
         fprintf(stderr, "[headless] frame %ld presented\n", n);
+    enhance_present((IDirect3DDevice9*)self);
     if (g_record) record_frame((IDirect3DDevice9*)self);
     return g_real_present(self, src, dst, wnd, dirty);
 }
@@ -185,8 +189,10 @@ static HRESULT WINAPI hl_CreateDevice(void* self, UINT adapter, DWORD type, HWND
     pp->Windowed = TRUE;
     pp->FullScreen_RefreshRateInHz = 0;
     pp->BackBufferFormat = D3DFMT_UNKNOWN;
+    enhance_fix_params(pp);
     HRESULT hr = g_real_create_device(self, adapter, type, focus, flags, pp, out);
     fprintf(stderr, "[headless] CreateDevice -> 0x%08lX\n", hr);
+    if (hr == D3D_OK) enhance_device_created((IDirect3DDevice9*)*out, pp->hDeviceWindow ? pp->hDeviceWindow : focus);
     if (hr == D3D_OK && !g_real_present) {
         void** vt = *(void***)*out;
         DWORD old;
@@ -232,7 +238,7 @@ static void shim_GetProcAddress(void) {
         g_real_d3dcreate9 = (d3dcreate9_t)p;
         p = (FARPROC)hl_Direct3DCreate9;
     }
-    else if (p && ARG(1) >> 16) p = input_wrap_proc(name, p);
+    else if (p && ARG(1) >> 16 && g_headless) p = input_wrap_proc(name, p);   /* scripted DirectInput */
     g_eax = (uint32_t)(uintptr_t)p;
     g_esp += 4 + 2 * 4;
 }
@@ -376,13 +382,12 @@ static void shim_GetSystemMetrics(void) {
     { "GetCommandLineA", shim_GetCommandLineA }, \
     { "GetModuleHandleW", shim_GetModuleHandleW }, \
     { "GetModuleFileNameW", shim_GetModuleFileNameW }, \
-    { "GetCommandLineW", shim_GetCommandLineW }
+    { "GetCommandLineW", shim_GetCommandLineW }, \
+    { "GetProcAddress", shim_GetProcAddress }
 
 static native32_shim_t g_shims[] = { GUEST_SHIMS };
 
 static native32_shim_t g_headless_shims[] = {
-    GUEST_SHIMS,
-    { "GetProcAddress", shim_GetProcAddress },
     { "MessageBoxA", shim_MessageBoxA },
     { "MessageBoxW", shim_MessageBoxW },
     { "CreateWindowExA", shim_CreateWindowExA },
@@ -680,16 +685,25 @@ int main(int argc, char** argv) {
         return 1;
     }
     printf("  mapped %s: 0x%08X-0x%08X\n", exe, ROL_IMAGE_BASE, ROL_IMAGE_BASE + span);
-    if (g_headless) {                  /* headless also takes the scripted-input shims */
-        int nh = (int)(sizeof g_headless_shims / sizeof g_headless_shims[0]);
-        native32_shim_t* all = (native32_shim_t*)calloc(nh + INPUT_NSHIMS, sizeof *all);
-        memcpy(all, g_headless_shims, sizeof g_headless_shims);
-        memcpy(all + nh, g_input_shims, sizeof g_input_shims);
-        if (native32_bind(ROL_IMAGE_BASE, all, nh + INPUT_NSHIMS)) return 1;
-    } else if (native32_bind(ROL_IMAGE_BASE, g_shims, (int)(sizeof g_shims / sizeof g_shims[0]))) {
-        return 1;
+    {   /* every run: the guest shims and the enhancements'; headless adds the
+         * hidden window and the scripted input */
+        int ng = (int)(sizeof g_shims / sizeof g_shims[0]);
+        int nh = g_headless ? (int)(sizeof g_headless_shims / sizeof g_headless_shims[0]) : 0;
+        int ni = g_headless ? INPUT_NSHIMS : 0, n = 0;
+        native32_shim_t* all = (native32_shim_t*)calloc(ng + ENHANCE_NSHIMS + nh + ni, sizeof *all);
+        memcpy(all + n, g_shims, sizeof g_shims); n += ng;
+        memcpy(all + n, g_enhance_shims, sizeof g_enhance_shims); n += ENHANCE_NSHIMS;
+        if (nh) { memcpy(all + n, g_headless_shims, sizeof g_headless_shims); n += nh; }
+        if (ni) { memcpy(all + n, g_input_shims, sizeof g_input_shims); n += ni; }
+        if (native32_bind(ROL_IMAGE_BASE, all, n)) return 1;
     }
     printf("  guest exe %s\n", g_guest_exe);
+    {   /* rol.ini and rol_data\ sit next to rol.exe */
+        char hd[MAX_PATH], *slash;
+        GetModuleFileNameA(NULL, hd, MAX_PATH);
+        if ((slash = strrchr(hd, '\\'))) *slash = 0;
+        enhance_init(hd, g_headless);
+    }
 
     if (!run) {
         printf("\n(dry run: image mapped and bound; --run enters 0x%08X)\n", rol_entry_va);

@@ -39,12 +39,14 @@ typedef struct { int key; int x, y, x2, y2; double at; } event_t;
 #define EV_MOVE (-1)
 #define EV_RCLICK (-2)
 #define EV_DRAG (-3)
+#define EV_WHEEL (-4)                          /* x = delta, 120 a notch, + away from you */
 static event_t g_events[MAX_EVENTS];
 static int g_nevents;
 /* Where the script wants the cursor, in client pixels. Windows messages and
  * GetCursorPos report it as is; the game's own cursor is steered to it with
  * DirectInput motion (see mouse_step). */
 static POINT g_oscursor = { 512, 384 };
+static volatile LONG g_wheel;          /* wheel motion not yet read by the game */
 static volatile LONG g_steer;          /* a move or click has happened */
 static volatile LONG g_held[256];              /* scripted keys/buttons down */
 
@@ -57,6 +59,15 @@ int input_arg(int argc, char** argv, int i) {
         at = strchr(argv[i + 1], '@');
         e->at = at ? atof(at + 1) : 0;
         e->key = argv[i][2] == 'm' ? EV_MOVE : argv[i][2] == 'r' ? EV_RCLICK : EV_CLICK;
+        g_nevents++;
+        return 2;
+    }
+    if (!strcmp(argv[i], "--wheel")) {
+        event_t* e = &g_events[g_nevents];
+        e->x = atoi(argv[i + 1]);
+        at = strchr(argv[i + 1], '@');
+        e->at = at ? atof(at + 1) : 0;
+        e->key = EV_WHEEL;
         g_nevents++;
         return 2;
     }
@@ -120,6 +131,12 @@ static DWORD WINAPI script(LPVOID unused) {
             Sleep(90);
             button(vk, 0);
             fprintf(stderr, "[input] %.1fs %s %d,%d\n", e->at, vk == VK_LBUTTON ? "click" : "rclick", e->x, e->y);
+        } else if (e->key == EV_WHEEL) {
+            POINT sp = g_oscursor;
+            InterlockedExchangeAdd(&g_wheel, e->x);
+            ClientToScreen(g_game_hwnd, &sp);
+            PostMessageA(g_game_hwnd, WM_MOUSEWHEEL, MAKEWPARAM(0, (SHORT)e->x), MAKELPARAM(sp.x, sp.y));
+            fprintf(stderr, "[input] %.1fs wheel %d\n", e->at, e->x);
         } else if (e->key == EV_DRAG) {
             move_to(e->x, e->y, 250);
             Sleep(60);
@@ -130,7 +147,8 @@ static DWORD WINAPI script(LPVOID unused) {
             button(VK_LBUTTON, 0);
             fprintf(stderr, "[input] %.1fs drag %d,%d -> %d,%d\n", e->at, e->x, e->y, e->x2, e->y2);
         } else {
-            UINT sc = MapVirtualKeyA(e->key, MAPVK_VK_TO_VSC);
+            UINT sx = MapVirtualKeyA(e->key, MAPVK_VK_TO_VSC_EX);
+            UINT sc = (sx & 0xFF) | ((sx >> 8) == 0xE0 ? 0x100 : 0);   /* bit 24: extended (Page Up, not keypad 9) */
             g_held[e->key & 0xFF] = 1;
             PostMessageA(g_game_hwnd, WM_KEYDOWN, e->key, 1 | (sc << 16));
             Sleep(90);
@@ -165,6 +183,15 @@ void input_start(void) {
 static void* g_mouse_dev;
 static void* g_kbd_dev;
 static int g_told_btn, g_told_rbtn;
+
+/* A virtual key as DirectInput names it. Extended keys (Page Up, the arrows,
+ * Home, End, Insert, Delete) share their scan code with the numeric keypad and
+ * differ only by the E0 prefix; DirectInput adds 0x80 for it. Without that,
+ * Page Up reached the game as keypad 9. */
+static unsigned dik(int vk) {
+    unsigned sc = MapVirtualKeyA((UINT)vk, MAPVK_VK_TO_VSC_EX);
+    return (sc & 0xFF) | ((sc >> 8) == 0xE0 ? 0x80 : 0);
+}
 static unsigned char g_told_keys[256];
 static DWORD g_seq;
 static volatile LONG g_n_state[2], g_n_data[2];   /* [mouse, keyboard] reads */
@@ -234,11 +261,12 @@ static HRESULT WINAPI hl_state(void* self, DWORD cb, LPVOID out) {
     if (self == g_mouse_dev && cb >= sizeof(DIMOUSESTATE)) {
         DIMOUSESTATE* m = (DIMOUSESTATE*)out;
         mouse_step(&m->lX, &m->lY);
+        m->lZ = InterlockedExchange(&g_wheel, 0);
         m->rgbButtons[0] = g_held[VK_LBUTTON] ? 0x80 : 0;
         m->rgbButtons[1] = g_held[VK_RBUTTON] ? 0x80 : 0;
     } else if (self == g_kbd_dev && cb >= 256) {
         for (int vk = 1; vk < 256; vk++)
-            if (g_held[vk]) ((BYTE*)out)[MapVirtualKeyA(vk, MAPVK_VK_TO_VSC) & 0xFF] = 0x80;
+            if (g_held[vk]) ((BYTE*)out)[dik(vk)] = 0x80;
     }
     return DI_OK;
 }
@@ -262,9 +290,10 @@ static HRESULT WINAPI hl_data(void* self, DWORD cb, LPDIDEVICEOBJECTDATA out, LP
         int rbtn = g_held[VK_RBUTTON] != 0;
         if (btn != g_told_btn) { EMIT(DIMOFS_BUTTON0, btn ? 0x80 : 0); g_told_btn = btn; }
         if (rbtn != g_told_rbtn) { EMIT(DIMOFS_BUTTON1, rbtn ? 0x80 : 0); g_told_rbtn = rbtn; }
+        { LONG z = InterlockedExchange(&g_wheel, 0); if (z) EMIT(DIMOFS_Z, z); }
     } else if (self == g_kbd_dev) {
         for (int vk = 1; vk < 256; vk++) {
-            unsigned sc = MapVirtualKeyA(vk, MAPVK_VK_TO_VSC) & 0xFF;
+            unsigned sc = dik(vk);
             int down = g_held[vk] != 0;
             if (sc && down != g_told_keys[sc]) { EMIT(sc, down ? 0x80 : 0); g_told_keys[sc] = (unsigned char)down; }
         }

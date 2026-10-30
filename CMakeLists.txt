@@ -27,6 +27,7 @@ endif()
 add_executable(rol
   src/runtime/host.c
   src/runtime/input.c
+  src/runtime/enhance.c
   ${PCRECOMP}/runtime/native32/native32.c
   ${PCRECOMP}/runtime/recomp32/image_loader.c
   ${PCRECOMP}/runtime/recomp32/recomp_trace.c
@@ -46,8 +47,8 @@ target_link_options(rol PRIVATE /BASE:0x60000000 /FIXED:NO /DYNAMICBASE:NO
                                       /MANIFESTUAC:NO)
 set(GEN_OPT "/O2" CACHE STRING "optimisation for the generated C")
 set_source_files_properties(${GEN_SOURCES} PROPERTIES COMPILE_OPTIONS "/w;${GEN_OPT}")
-set_source_files_properties(src/runtime/host.c src/runtime/input.c PROPERTIES COMPILE_OPTIONS "/W3")
-target_link_libraries(rol PRIVATE user32 gdi32 kernel32 dxguid)
+set_source_files_properties(src/runtime/host.c src/runtime/input.c src/runtime/enhance.c PROPERTIES COMPILE_OPTIONS "/W3")
+target_link_libraries(rol PRIVATE user32 gdi32 kernel32 dxguid ole32 shell32 windowscodecs)
 
 option(ROL_TRACE "record a ring buffer of lifted function entries" OFF)
 if(ROL_TRACE)

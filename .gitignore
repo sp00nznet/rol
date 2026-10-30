@@ -39,3 +39,6 @@ config/symbols*.json
 setup.log
 __pycache__/
 build-farm/
+
+# The play shortcut tools/setup.ps1 leaves
+/Rise of Legends (recomp).cmd
