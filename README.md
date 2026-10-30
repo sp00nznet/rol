@@ -14,7 +14,7 @@ tools get wrong goes back upstream. This repo follows pcrecomp's shared house
 style (layout, CLI, harness, headless mode), next to
 [The Movies](https://github.com/sp00nznet/themovies), its closest sibling.
 
-## Status: **v0.1.0-dev, alpha (bring-up). The whole game lifts, builds and boots to its main menu: intro, first-run dialogs and menu render; no match yet.**
+## Status: **v0.1.0-dev, alpha (bring-up). In game: a Quick Battle skirmish plays, and the Vinci campaign runs its opening cinematic into mission 1.**
 
 | Stage | State |
 |---|---|
@@ -28,8 +28,11 @@ style (layout, CLI, harness, headless mode), next to
 | Headless mode | `--headless --record out.mp4 --frames N` (from The Movies' host) |
 | Conformance harness | `tools/conformance.py`: **6/8 boot milestones** (mapped, bound, entered, its window, a D3D9 device), 0 lift errors, against `conformance.json` |
 
-Where it stops: Quick Battle calls a method the catalog decoded over
-([host.md](docs/host.md#quick-battle-a-vtable-method-the-catalog-decoded-over)).
+Where it is: menus, Quick Battle (map, HUD, economy ticking, AI opponent) and
+the campaign (cinematic, briefing, mission 1 with its tutorial) all run
+recompiled. Driven so far only by scripted left clicks; right-click orders and a
+whole match played to the end are next
+([host.md](docs/host.md#in-game)).
 
 Built on pcrecomp `main` (a85ea97) plus three open pull requests this game
 turned up: **#150** (`cmpxchg8b` was a no-op: the heap's lock spun forever),
@@ -45,6 +48,9 @@ Recorded headless (`--record`) from the recompiled build.
 |---|---|
 | ![Intro](docs/screenshots/intro.png) | ![Enter your name](docs/screenshots/enter-your-name.png) |
 | ![CEIP](docs/screenshots/ceip.png) | ![Main menu](docs/screenshots/main-menu.png) |
+| ![Quick Battle](docs/screenshots/quick-battle.png) | ![Skirmish](docs/screenshots/skirmish.png) |
+| ![Campaign intro](docs/screenshots/campaign-intro.png) | ![Mission 1 briefing](docs/screenshots/campaign-briefing.png) |
+| ![Mission 1](docs/screenshots/campaign-mission1.png) | |
 
 ## Getting Started
 

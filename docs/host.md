@@ -257,6 +257,38 @@ them after the other chunks, so only the tail of the lift changes. The fix
 belongs upstream in disasm32: a pointer-run target that is not an instruction
 boundary of its "owner" means the owner's decode is misaligned.
 
+## Start Game: a loop run as nested calls
+
+Starting the match overflowed the host stack in `sub_0062FE40`, calling
+`0x00630060` again and again. `0x00630060` is a loop head inside that function
+(`jl 0x00630060`). The catalog has three false entries inside the loop, each
+after a call (`0x0063005F`, `0x0063006D`, `0x00630073`). Each walk stops at the
+next one, so only `0x00630073` sees the back edge, and it lands below the entry
+just before it, so `generate.find_splits` did not call it a split. The loop then
+ran as one nested C call per iteration: harmless in a menu, fatal once a match
+loops over every unit. `find_splits` now also counts a back edge into code an
+earlier entry's own walk reaches (309 -> 428 splits; pcrecomp-rol `f5e0a20`,
+not yet upstream).
+
+## Remote sessions
+
+The game refuses to start in a remote desktop session; the host answers
+`GetSystemMetrics(SM_REMOTESESSION)` as a local console. A *disconnected* RDP
+session is different: it has no display, Direct3D 9 reports 0 adapters, and the
+game stops at "Graphics services failed to initialize". Run with the session
+connected (or on the console).
+
+## In game
+
+With those, a Quick Battle loads a random map and plays: the HUD, minimap and
+build menus draw, crystal and population tick up, scouts fly. The campaign's
+New Campaign plays the in-engine opening cinematic with subtitles, shows the
+briefing for The Vernazza Expedition, and mission 1 starts with its tutorial.
+Inputs so far are scripted left clicks (`--click x,y@s`); the screen order is
+Campaign (170,277) -> Vinci panel (240,400) -> New Campaign (511,340) -> Click
+To Begin Battle (512,664), and Quick Battle (170,327) -> Start Game (862,640)
+-> Close tips (786,577).
+
 ## The full build, and why it stopped
 
 At 12 parallel jobs, `cl` died on 14 of the 30-50 MB chunks with no diagnostic
